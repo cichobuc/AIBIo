@@ -1,0 +1,36 @@
+export type SubagentName =
+  | 'schema-explorer'
+  | 'data-profiler'
+  | 'interviewer'
+  | 'docs-keeper'
+  | 'model-architect'
+  | 'sql-writer'
+  | 'transformation-suggester'
+  | 'test-generator'
+  | 'code-generator';
+
+export type ActorName = SubagentName | 'supervisor';
+
+export type AIMode = 'auto' | 'documentation' | 'queries' | 'manual';
+
+export type TokenCounter = {
+  input: number;
+  output: number;
+};
+
+export type AgentContext = {
+  workspaceId: string;
+  agentName: ActorName;
+  sessionId: string;
+  activeMode: AIMode;
+  tokenCounter: TokenCounter;
+  tokenLimit: number;
+};
+
+export type ConfidenceLevel = 'low' | 'medium' | 'high';
+export type DocSource = 'db_native' | 'ai_generated' | 'user_authored' | 'user_confirmed';
+export type DocRecordType = 'table' | 'column' | 'business_term' | 'relationship' | 'convention';
+export type ModelLayer = 'staging' | 'intermediate' | 'marts';
+export type Materialization = 'table' | 'view' | 'incremental';
+export type RunStatus = 'success' | 'error' | 'running' | 'queued';
+export type TestKind = 'unique' | 'not_null' | 'foreign_key' | 'accepted_values';

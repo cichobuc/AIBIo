@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Database
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test & coverage
+coverage/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Misc
+*.tgz
+.cache/
+tmp/
+temp/
+
+# Machine-specific MCP config (paths are local)
+.mcp.json
+
+# TypeScript build info
+tsconfig.tsbuildinfo
