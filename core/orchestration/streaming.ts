@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import type { ApprovalGateType, ApprovalGateDetails } from '@/core/types/permissions.js';
-import type { DocRecordType } from '@/core/types/agent.js';
+import type { ApprovalGateType, ApprovalGateDetails } from '@/core/types/permissions';
+import type { DocRecordType } from '@/core/types/agent';
 
 export type BaseSSEEvent = {
   sessionId: string;

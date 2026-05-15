@@ -7,9 +7,9 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { getAllTools, getTool } from './tool-registry.js';
-import { getAgentContext, withAgentContext } from './context.js';
-import type { AgentContext } from './context.js';
+import { getAllTools, getTool } from './tool-registry';
+import { getAgentContext, withAgentContext } from './context';
+import type { AgentContext } from './context';
 
 type McpInstance = { server: Server; client: Client };
 
@@ -44,6 +44,21 @@ async function createInstance(): Promise<McpInstance> {
     // synchronous message passing + Promise microtask chain. getAgentContext()
     // is safe here because callTool() below wraps its caller in withAgentContext().
     const ctx = getAgentContext();
+
+    // CR-MCP-002 / CR-MCP-004: enforce allowedCallers at runtime
+    const callerName = ctx?.agentName;
+    if (callerName !== undefined && !def.allowedCallers.includes(callerName)) {
+      return {
+        isError: true,
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            error: 'PERMISSION_DENIED',
+            message: `Tool "${request.params.name}" is not allowed for agent "${callerName}". Allowed: ${def.allowedCallers.join(', ')}`,
+          }),
+        }],
+      };
+    }
 
     try {
       const result = await def.handler(args, ctx);
@@ -89,6 +104,11 @@ export async function callTool<TOutput = unknown>(
     const text = content[0]?.text;
     if (text === undefined) {
       throw new Error(`Tool "${name}" returned empty content`);
+    }
+
+    if (result.isError) {
+      const parsed = JSON.parse(text) as { error: string; message: string };
+      throw new Error(parsed.message ?? text);
     }
 
     return JSON.parse(text) as TOutput;

@@ -1,7 +1,16 @@
-import type { Tool } from '@anthropic-ai/sdk/resources/messages.js';
-import type { ApprovalGateType } from '@/core/types/permissions.js';
-import type { ActorName } from '@/core/types/agent.js';
-import type { AgentContext } from './context.js';
+import type { ApprovalGateType } from '@/core/types/permissions';
+import type { ActorName } from '@/core/types/agent';
+import type { AgentContext } from './context';
+
+type AgentTool = {
+  name: string;
+  description: string;
+  input_schema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+};
 
 export type JsonSchema = {
   type: 'object';
@@ -50,7 +59,7 @@ export function getAllTools(): ToolDefinition[] {
   return Array.from(registry.values());
 }
 
-export function getToolsForAgent(agentName: ActorName): Tool[] {
+export function getToolsForAgent(agentName: ActorName): AgentTool[] {
   return getAllTools()
     .filter((t) => t.allowedCallers.includes(agentName))
     .map((t) => ({

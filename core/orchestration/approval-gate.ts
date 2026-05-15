@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { ApprovalGateType, ApprovalGateDetails, ApprovalResult } from '@/core/types/permissions.js';
-import { sseEmitter } from './streaming.js';
-import { getAgentContext } from './context.js';
+import type { ApprovalGateType, ApprovalGateDetails, ApprovalResult } from '@/core/types/permissions';
+import { sseEmitter } from './streaming';
+import { getAgentContext } from './context';
 
 const TIMEOUT_MS = 300_000;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { registerTool, getTool, getAllTools } from '@/core/agent-sdk/tool-registry.js';
+import { registerTool, getTool, getAllTools } from '@/core/orchestration/tool-registry';
 import {
   awaitApproval,
   resolveApproval,
@@ -7,16 +7,17 @@ import {
   wasAlreadyResolved,
   cleanupPendingGates,
   ApprovalDeniedError,
-} from '@/core/agent-sdk/approval-gate.js';
-import { withAgentContext } from '@/core/agent-sdk/context.js';
-import type { AgentContext } from '@/core/types/agent.js';
+} from '@/core/orchestration/approval-gate';
+import { withAgentContext } from '@/core/orchestration/context';
+import type { AgentContext } from '@/core/types/agent';
 
 function makeCtx(overrides: Partial<AgentContext> = {}): AgentContext {
   return {
     workspaceId: 'ws-test',
     agentName: 'supervisor',
     sessionId: 'sess-test',
-    activeMode: 'auto',
+    aiMode: 'auto',
+    activeModule: 'shell',
     tokenCounter: { input: 0, output: 0 },
     tokenLimit: 100_000,
     ...overrides,

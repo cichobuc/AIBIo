@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AgentContext } from '@/core/types/agent.js';
-import { sseEmitter } from './streaming.js';
+import type { AgentContext } from '@/core/types/agent';
+import { sseEmitter } from './streaming';
 
 export type { AgentContext };
 

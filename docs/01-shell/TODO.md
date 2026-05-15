@@ -1,7 +1,7 @@
 # TODO — Shell (Supervisor + Workspace UI)
 
 > **Phase:** P0c–P0d
-> **Status:** not started
+> **Status:** in_progress (P0c — UI Foundation + Claude design tools)
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §5.3 §7 §15, ../DATABASE_SCHEMA.md §4 (workspace_settings), ../MCP_TOOLS.md (supervisor tool whitelist), ../API_CONTRACT.md §POST-chat §GET-messages, ../AGENT_PROMPTS.md §1 (supervisor system prompt)
 
@@ -13,7 +13,21 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 
 - [x] `app/api/stream/[workspaceId]/route.ts` — existuje (v Core)
 - [x] `app/api/approvals/[requestId]/route.ts` — existuje (v Core)
-- [ ] Všetky shell komponenty, hooks, lib — greenfield
+- [ ] `app/api/chat/[workspaceId]/route.ts` — POST handler s persist + supervisor dispatch
+- [ ] `app/api/chat/[workspaceId]/messages/route.ts` — GET s cursor pagination
+- [x] `app/workspace/[workspaceId]/layout.tsx` — WorkspaceLayout server component wrapper
+- [x] `app/workspace/[workspaceId]/page.tsx` — redirect na /connect
+- [x] 7 stub pages (connect, explore, govern, model, document, test, export) + dynamic `[module]/page.tsx`
+- [x] `modules/ainderstanding/shell/components/` — WorkspaceLayout, ActivityBar, TopBar, ModeSelector, StatusBar, GlobalChatPanel, MessageList, ChatInput, ApprovalDialog, ActiveAgentsBadge, ContextBar, CommandPalette, BottomPanel, PrimarySidebar (stub), ToolCallChip, ApprovalRequiredCard
+- [x] `modules/ainderstanding/shell/store/workspace-store.ts` — Zustand store s persist middleware (nahradil useWorkspaceContext)
+- [x] `modules/ainderstanding/shell/hooks/useSSEStream.ts` — EventSource wrapper, backoff 1/2/4/8/16s max 5×
+- [x] `modules/ainderstanding/shell/hooks/useKeyboardShortcuts.ts` — ⌘B/⌘⇧A/⌘J/⌘1-7
+- [ ] `modules/ainderstanding/shell/lib/supervisor-state.ts` — SupervisorState discriminated union, MAX_TURNS
+- [ ] `modules/ainderstanding/shell/lib/intent-classifier.ts` — sync classifyIntent
+- [ ] `modules/ainderstanding/shell/lib/session-manager.ts` — in-memory Map, createSession/endSession
+- [ ] `modules/ainderstanding/shell/lib/dispatcher.ts` — invokeSubagent (P0d stub), invokeParallel
+- [ ] `modules/ainderstanding/shell/lib/post-processing.ts` — runPostProcessing (no-op v P0d)
+- [ ] `modules/ainderstanding/shell/orchestrator.ts` — createSupervisor factory, Anthropic SDK stream
 
 ## 3. Závislosti
 
@@ -60,64 +74,39 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 
 ### 4.3 Routes (`app/workspace/`)
 
-- [ ] `app/workspace/[workspaceId]/layout.tsx` — server component wrapper, `WorkspaceLayout` inject
-- [ ] `app/workspace/[workspaceId]/[module]/page.tsx` — dynamic segment, stub pre každý z 8 modulov (connect, explore, govern, model, document, test, translate, export) — len heading + "Coming soon"
-- [ ] `app/workspace/[workspaceId]/page.tsx` — redirect na `/connect` (default modul)
+- [x] `app/workspace/[workspaceId]/layout.tsx` — server component wrapper, `WorkspaceLayout` inject
+- [x] `app/workspace/[workspaceId]/[module]/page.tsx` — dynamic segment, stub pre každý modul — len heading + "Coming soon"
+- [x] `app/workspace/[workspaceId]/page.tsx` — redirect na `/connect` (default modul)
 
 ### 4.4 UI komponenty (`modules/ainderstanding/shell/components/`)
 
-- [ ] `WorkspaceLayout.tsx` — flex container s:
-  - Top bar (48px): workspace name, ModeSelector, user avatar
-  - Activity bar (48px wide): module icons s tooltip labels
-  - Primary sidebar (260px): contextual per-module panel slot
-  - Main content: `{children}` (každý sub-modul page)
-  - AI chat panel (360px right): `GlobalChatPanel`
-  - Bottom panel: output tabs (Run Results, Test Results, Logs)
-  - Status bar (24px): aktívny agent, session state
-- [ ] `SideNav.tsx` / `ActivityBar.tsx` — ikony pre Connect, Explore, Govern, Model, Document, Test, Translate, Export + Settings, Help; aktívny modul = 2px accent border left
-- [ ] `ModeSelector.tsx` — `DropdownMenu` s 4 možnosťami: Auto / Documentation / Queries / Manual; uloží do `workspace_settings.ai_mode` + do `WorkspaceContext`
-- [ ] `GlobalChatPanel.tsx`:
-  - Header s "AI Assistant" titulom + collapse button
-  - `ActiveAgentsBadge` — zobrazí mená aktívnych agentov (z SSE `agent_thinking` events)
-  - `MessageList` — scroll container, SSE-driven updates
-  - `ContextBar` — aktívny modul + posledný source (mini info strip)
-  - `ChatInput` — textarea, ⌘↵ submit, disabled v Manual mode a počas approval gate (BR-SHL-010, BR-SHL-047)
-- [ ] `MessageList.tsx` — render per `SSEEvent.type`:
-  - `agent_thinking` → spinner s agentName
-  - `agent_message` → chat bubble s agentName badge, partial streaming support
-  - `tool_call` → collapsible tool call chip (toolName)
-  - `tool_result` → success/error indicator + summary
-  - `approval_required` → trigger pre `ApprovalDialog` (nerendruje priamo, emituje event)
-  - `stream_end` → "Done" indicator
-  - `stream_error` → error banner
-  - `doc_update`, `coverage_update`, `model_run_update`, `test_run_update`, `schema_update` → subtle system message
-- [ ] `ApprovalDialog.tsx` — globálny modal (nad všetkým):
-  - Počúva SSE `approval_required` event
-  - Renderuje type-specific detail podľa `gateType`: SQL snippet pre `execute_query`, model name pre `write_model_file`, doc preview pre `write_to_docs`, test SQL pre `write_test_file`, row count pre `share_results_with_ai`
-  - Tlačidlá: Approve / Deny / "Approve for session" (session-scoped policy)
-  - POST `{ decision: 'approved' | 'denied' }` na `/api/approvals/[requestId]`
-  - Počas čakania: `ChatInput` disabled
+- [x] `WorkspaceLayout.tsx` — flex container: TopBar (48px) / ActivityBar / ResizablePanelGroup (sidebar 19% | main | chat 26%) / StatusBar; react-resizable-panels v4
+- [x] `ActivityBar.tsx` — ikony pre Connect, Explore, Govern, Model, Document, Test, Export + Settings, Help; aktívny modul = 2px primary border left
+- [x] `ModeSelector.tsx` — `DropdownMenu` s 4 možnosťami: Auto / Documentation / Queries / Manual; farebný indicator dot
+- [x] `GlobalChatPanel.tsx` — Header + collapse button + `ActiveAgentsBadge` + `MessageList` + `ContextBar` + `ChatInput`
+- [x] `MessageList.tsx` — render všetkých 16 SSEEvent typov (agent_thinking, agent_message, tool_call, tool_result, approval_required, stream_end, stream_error, doc_update, coverage_update, model_run_update, test_run_update, schema_update, approval_resolved, ping, agent_start, agent_end)
+- [x] `ApprovalDialog.tsx` — Level 2 (BottomBanner fixed) + Level 3 (AlertDialog) s countdown timerom; POST na `/api/approvals/[requestId]`
+- [x] `TopBar.tsx` — breadcrumb (workspaceId/module), ModeSelector, Settings/Help buttons, Avatar
+- [x] `StatusBar.tsx` — mode colored dot, active agent + spinner, workspace name, ⌘K hint
+- [x] `BottomPanel.tsx` — toggle (⌘J), Tabs: output/sql/results/approvals
+- [x] `CommandPalette.tsx` — ⌘K dialog, Navigation/AI/Actions sekcie
+- [x] `PrimarySidebar.tsx` — stub (čaká na sub-modul view implementáciu)
+- [x] `ActiveAgentsBadge.tsx`, `ContextBar.tsx`, `ChatInput.tsx`, `ToolCallChip.tsx`, `ApprovalRequiredCard.tsx`
 
 ### 4.5 Hooks (`modules/ainderstanding/shell/hooks/`)
 
-- [ ] `useWorkspaceContext.ts` + `WorkspaceContextProvider`:
-  - State: `{ workspaceId, activeModule, aiMode, isSessionActive, sessionId }`
-  - Poskytnutý cez `app/workspace/[workspaceId]/layout.tsx`
-- [ ] `useSSEStream.ts` — `EventSource` wrapper:
-  - Auto-connect na `GET /api/stream/[workspaceId]`
-  - Heartbeat: server posiela `ping` event každých 15s (API_CONTRACT.md) — klient ignoruje `ping`, ale deteguje absenciu (> 30s bez eventu → reconnect)
-  - Auto-reconnect pri disconnect (exponential backoff: 1s, 2s, 4s, 8s, max 5× — BR-SHL-061)
-  - Filter events podľa `sessionId` (ignorovať eventy z iných sessions)
-  - Ignorovať `ping` events
-  - Typed dispatch do `onEvent(event: SSEEvent)` callback
-  - `ANTHROPIC_API_ERROR` na strane servera → server emituje `stream_error` SSE event → UI zobrazí error banner s retry CTA
+- [x] `useSSEStream.ts` — `EventSource` wrapper s exponential backoff (1/2/4/8/16s max 5×), stale detection >30s, dispatch do Zustand store
+- [x] `useKeyboardShortcuts.ts` — ⌘B (sidebar), ⌘⇧A (chat), ⌘J (bottom), ⌘1-7 (navigate)
+- [ ] `useWorkspaceContext.ts` — nahradený Zustand store v `shell/store/workspace-store.ts`; pre-TypeScript typing wrapper ak bude potrebný
 
 ### 4.6 Lib (`modules/ainderstanding/shell/lib/`)
 
 - [ ] `intent-classifier.ts` — sync rule-based (nie LLM):
   - Input: `{ message, activeModule, aiMode, workspaceState }`
-  - Output: `DispatchPlan { mode: 'manual_only' | 'single_agent' | 'parallel' | 'multi_step', steps: AgentStep[] }`
-  - Pravidlá: BR-SHL-020 (mode filtering), BR-SHL-021 (active module boost)
+  - Output: `DispatchPlan { mode: 'manual_only' | 'direct_agent' | 'coordinator' | 'multi_phase', target?: string, steps?: AgentStep[] }`
+  - Pravidlá: BR-SHL-020 (mode filtering), BR-SHL-021 (active module boost), BR-SHL-024 (coordinator bypass podmienky)
+  - `coordinator` mode → `target` je meno koordinátora (napr. `'explore-coordinator'`)
+  - `multi_phase` mode → LLM fallback, supervisor rozhodne o sekvencii coordinatorov/agentov
   - Manual mode → `{ mode: 'manual_only', steps: [] }`
 - [ ] `session-manager.ts`:
   - `createSession(workspaceId): Session` — UUID, timestamp, initial state
@@ -130,27 +119,45 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
   - Max 20 turns hard cap (BR-SHL-003) — after 20 turns force `COMPLETING`
   - Persist state per sessionId in-memory
 - [ ] `dispatcher.ts`:
-  - `invokeSubagent(name, tools, context): Promise<SubagentResult>`
-  - Parallel dispatch: `Promise.all()` pre `parallelGroup` steps
-  - Serialized approval: čaká na resolve pred ďalším krokompre BR-SHL-023
-- [ ] `post-processing.ts` — automatické post-processing hooks (BR-SHL-045):
-  - Po `sql-writer` → volá `parse_lineage` MCP tool
-  - Po `docs-keeper` → volá `update_coverage`
-  - Po `materialize_models` → volá `run_tests`
+  - `invokeCoordinator(name, context): Promise<CoordinatorResult>` — pre `coordinator` mode
+  - `invokeAgent(name, tools, context): Promise<AgentResult>` — pre `direct_agent` mode
+  - Parallel dispatch: `Promise.all()` pre `parallelGroup` steps (ak v `multi_phase`)
+  - Serialized approval: čaká na resolve pred ďalším krokom — BR-SHL-023
+- [ ] `post-processing.ts` — supervisor-owned cross-phase PostToolUse hooks (BR-SHL-045b):
+  - Po `materialize_models` → volá `run_tests` (ak `auto_run_tests = true`)
+  - **Nie** `parse_lineage` po `sql-writer` — to je `model-coordinator` PostToolUse hook
+  - **Nie** `update_coverage` po `docs-keeper` — to je `document-coordinator` PostToolUse hook
 
 ### 4.7 Supervisor agent (`modules/ainderstanding/shell/orchestrator.ts`)
 
 - [ ] Factory function `createSupervisor(context: AgentContext)` — vracia `Supervisor` instance
-- [ ] `@anthropic-ai/sdk` `client.messages.create()` so `stream: true`
-- [ ] Model: `claude-sonnet-4-6`, temperature: `0`, max_tokens: `4096`
-- [ ] System prompt — z AGENT_PROMPTS.md §1; inject: `workspaceId`, `activeModule`, `aiMode`, `sourcesSummary`, `modelCount`, `docCoveragePct`
-- [ ] Granted tools (read-only + orchestration) — z MCP_TOOLS.md supervisor whitelist:
-  - `validate_sql`, `parse_lineage`, `materialize_models`, `run_tests`, `test_failure_handoff`
-  - `update_coverage`, `assess_readiness`, `guarded_share_results`
-  - `invoke_subagent` (interný, nie MCP — volá `dispatcher.ts`)
-- [ ] **Vynechané** (write tools): `write_model_file`, `write_test_file`, `write_doc_record`, `write_doc_record_update` (BR-SHL-001)
+- [ ] `@anthropic-ai/claude-agent-sdk` `query()` s async iterátorom; `agents` mapa obsahuje **4 coordinators + 8 atomic agents** (Tier 2 + Tier 3) — viď AGENT_PROMPTS.md §§1a-1e
+- [ ] Model: `"sonnet"` (alias), temperature: `0`, max_tokens: `4096`
+- [ ] System prompt — z AGENT_PROMPTS.md §1a (supervisor); inject: `workspaceId`, `activeModule`, `aiMode`, `sourcesSummary`, `modelCount`, `docCoveragePct`
+- [ ] **Registrácia coordinatorov v `supervisorAgents`** (CR-MCP-004):
+  - `'explore-coordinator'`: `exploreCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__read_schema_snapshot']`, model: `haiku`)
+  - `'model-coordinator'`: `modelCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__validate_sql', 'mcp__aibio__parse_lineage', 'mcp__aibio__read_schema_snapshot', 'mcp__aibio__read_existing_models', 'mcp__aibio__materialize_models']`, model: `sonnet`)
+  - `'document-coordinator'`: `documentCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__assess_readiness', 'mcp__aibio__update_coverage', 'mcp__aibio__read_coverage_summary']`, model: `sonnet`)
+  - `'quality-coordinator'`: `qualityCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__run_tests', 'mcp__aibio__test_failure_handoff', 'mcp__aibio__read_existing_models']`, model: `sonnet`)
+- [ ] Granted supervisor tools (read-only + cross-phase orchestration) — MCP_TOOLS.md Tool Ownership Matrix:
+  - `Task` (built-in SDK tool — deleguje na coordinatorov/agentov z `agents` mapy)
+  - `mcp__aibio__validate_sql`, `mcp__aibio__parse_lineage`, `mcp__aibio__materialize_models`
+  - `mcp__aibio__run_tests`, `mcp__aibio__assess_readiness`
+  - `mcp__aibio__read_coverage_summary`, `mcp__aibio__guarded_share_results`
+- [ ] **Vynechané** (write tools): `write_model_file`, `write_test_file`, `write_doc_record`, `update_doc_record` (BR-SHL-001)
+- [ ] **Vynechané** (coordinator-owned tools): `update_coverage`, `test_failure_handoff` — nie sú v supervisor allowedTools (BR-SHL-002)
+- [ ] `canUseTool: approvalGateCanUseTool` — z `core/orchestration/approval-gate.ts`; predaný do `query()` options pre consent enforcement na gated tools
+- [ ] `hooks: supervisorHooks` — z `core/orchestration/hooks.ts`; registruje `PostToolUse` pre deterministický post-processing
 - [ ] Streaming response → SSE emit každého chunk cez `sseEmitter.emit(workspaceId, event)`
-- [ ] Tool use response handling → dispatch na subagenta cez `dispatcher.ts`
+
+### 4.8 Hooks (`core/orchestration/hooks.ts`)
+
+- [ ] Vytvoriť `core/orchestration/hooks.ts` s exportom `supervisorHooks: SdkHooks`
+- [ ] `PostToolUse` matcher `mcp__aibio__write_model_file` → volá `parse_lineage` (**nie** `update_coverage` — to je `document-coordinator` hook, nie supervisor)
+- [ ] `PostToolUse` matcher `mcp__aibio__materialize_models` → volá `run_tests` (ak `auto_run_tests = true`)
+- [ ] Predať `hooks: supervisorHooks` do `query()` v `orchestrator.ts`
+- [ ] Consent enforcement (pre-tool blocking) riešiť cez `canUseTool` callback — **nie** `PreToolUse` hook
+- [ ] **Poznámka:** `model-coordinator` a `document-coordinator` majú vlastné `SdkHooks` (coordinator-level PostToolUse) — definované v ich `AgentDefinition` alebo coordinator orchestrator súboroch, nie tu
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 

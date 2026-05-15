@@ -6,9 +6,9 @@ Implementačný poriadok a stav všetkých modulov. Číslo = implementačné po
 
 | # | Module     | Phase     | Status      | Est.  | TODO                                          |
 |---|------------|-----------|-------------|-------|-----------------------------------------------|
-| 0 | core       | P0a–P0b   | in progress | ~8h   | [docs/00-core/TODO.md](./00-core/TODO.md)     |
-| 1 | shell      | P0c–P0d   | not started | ~8h   | [docs/01-shell/TODO.md](./01-shell/TODO.md)   |
-| 2 | connect    | C1        | not started | ~3d   | [docs/02-connect/TODO.md](./02-connect/TODO.md) |
+| 0 | core       | P0a–P0b   | done        | ~8h   | [docs/00-core/TODO.md](./00-core/TODO.md)     |
+| 1 | shell      | P0c–P0d   | in progress | ~8h   | [docs/01-shell/TODO.md](./01-shell/TODO.md)   |
+| 2 | connect    | C1        | done        | ~3d   | [docs/02-connect/TODO.md](./02-connect/TODO.md) |
 | 3 | explore    | E1–E2     | not started | ~4d   | [docs/03-explore/TODO.md](./03-explore/TODO.md) |
 | 4 | govern     | G1–G2     | not started | ~4d   | [docs/04-govern/TODO.md](./04-govern/TODO.md) |
 | 5 | model      | M1–M3     | not started | ~7d   | [docs/05-model/TODO.md](./05-model/TODO.md)   |
@@ -47,7 +47,7 @@ Implementačný poriadok a stav všetkých modulov. Číslo = implementačné po
 
 | Ak robíš...       | Potrebuješ hotové...                                    |
 |-------------------|---------------------------------------------------------|
-| 01-shell dispatch | 00-core MCP server + approval gate + SSE (`core/agent-sdk/`) |
+| 01-shell dispatch | 00-core MCP server + approval gate + SSE (`core/orchestration/`) |
 | 02-connect        | 00-core `core/db/client.ts` + `core/db/encryption.ts`  |
 | 03-explore E2     | 04-govern G1 `internal-adapter` + `permission-service` |
 | 04-govern UI      | 03-explore E1 `pii_candidates` v DB                    |
@@ -57,6 +57,15 @@ Implementačný poriadok a stav všetkých modulov. Číslo = implementačné po
 | 08-translate generate | 05-model SQL definície                             |
 | 09-export X1      | 02-connect metadata, 05-model SQL, 07-test .yml, 06-document docs |
 | 09-export X2+     | 08-translate snippet cache + `code-generator`          |
+
+---
+
+## Migrácie (dokončené)
+
+| Zmena | Stav |
+|-------|------|
+| `core/agent-sdk/` → `core/orchestration/` (premenované) | done |
+| `@anthropic-ai/sdk` → `@anthropic-ai/claude-agent-sdk` (migrované) | done |
 
 ---
 
@@ -79,9 +88,9 @@ Tieto súbory sú referenčné pre celý projekt a nie sú vlastníctvom žiadne
 | [AINDERSTANDING.md](./AINDERSTANDING.md) | AInderstanding product spec, sub-modul index |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Detailná technická architektúra (state machines, agent patterns, data flow) |
 | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | Kompletná Drizzle schéma všetkých tabuliek s komentármi |
-| [MCP_TOOLS.md](./MCP_TOOLS.md) | Zoznam všetkých 28 MCP tools (25 MVP + 3 Translate post-MVP; tool name, allowedCallers, gate type, popis) |
+| [MCP_TOOLS.md](./MCP_TOOLS.md) | Zoznam všetkých 29 MCP tools (26 MVP + 3 Translate post-MVP; tool name, allowedCallers, gate type, popis); obsahuje Tool Ownership Matrix |
 | [API_CONTRACT.md](./API_CONTRACT.md) | REST endpointy, SSE event shapes, request/response types |
-| [AGENT_PROMPTS.md](./AGENT_PROMPTS.md) | System prompty, sampling params a tool grants — 1 supervisor + 9 LLM subagentov (10 entries; MVP = 8 LLM bez `code-generator`; `translate-validator` je deterministický service, nie LLM agent) |
+| [AGENT_PROMPTS.md](./AGENT_PROMPTS.md) | System prompty, sampling params a tool grants — 1 supervisor (Tier 1) + 4 Phase Coordinators (Tier 2) + 8 atomic LLM agents (Tier 3, MVP); Phase 2: +2 `code-generator-*`. `translate-validator` je deterministický service, nie LLM agent. |
 | [TESTING.md](./TESTING.md) | Vitest + Playwright konfigurácia, test patterns, no-DB-mock rule |
 | [DEPLOY.md](./DEPLOY.md) | Docker, GKE (raw K8s YAML), Traefik konfigurácia — Helm chart a Terraform sú post-MVP |
 | [DEV_SETUP.md](./DEV_SETUP.md) | Local development setup (npm, uv, env vars, Chinook demo) |

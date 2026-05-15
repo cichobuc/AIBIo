@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
-import { sseEmitter, type SSEEvent } from '@/core/agent-sdk/streaming.js';
-import { db } from '@/core/db/client.js';
-import { workspaces } from '@/core/db/schema.js';
+import { sseEmitter, type SSEEvent } from '@/core/orchestration/streaming';
+import { db } from '@/core/db/client';
+import { workspaces } from '@/core/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const runtime = 'nodejs';

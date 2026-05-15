@@ -60,11 +60,38 @@ const config: Config = {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+        /* AIBIo custom tokens */
+        'accent-ai': 'hsl(var(--accent-ai))',
+        layer: {
+          1: 'hsl(var(--layer-1))',
+          2: 'hsl(var(--layer-2))',
+          3: 'hsl(var(--layer-3))',
+          unknown: 'hsl(var(--layer-unknown))',
+        },
+        state: {
+          built: 'hsl(var(--state-built))',
+          stale: 'hsl(var(--state-stale))',
+          'not-built': 'hsl(var(--state-not-built))',
+          running: 'hsl(var(--state-running))',
+          failed: 'hsl(var(--state-failed))',
+        },
+      },
+      fontFamily: {
+        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-jetbrains)', 'JetBrains Mono', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      fontSize: {
+        'caption': ['12px', { lineHeight: '16px' }],
+        'body': ['13px', { lineHeight: '20px' }],
+        'default': ['14px', { lineHeight: '20px' }],
+        'section': ['16px', { lineHeight: '24px' }],
+        'module': ['20px', { lineHeight: '28px' }],
+        'workspace': ['24px', { lineHeight: '32px' }],
       },
     },
   },

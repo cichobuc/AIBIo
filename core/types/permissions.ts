@@ -1,4 +1,4 @@
-import type { DocRecordType } from './agent.js';
+import type { DocRecordType } from './agent';
 
 export type PermissionTier =
   | 'metadata_only'

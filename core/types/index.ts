@@ -1,3 +1,3 @@
-export * from './workspace.js';
-export * from './agent.js';
-export * from './permissions.js';
+export * from './workspace';
+export * from './agent';
+export * from './permissions';

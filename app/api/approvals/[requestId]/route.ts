@@ -4,7 +4,7 @@ import {
   hasPendingGate,
   wasAlreadyResolved,
   resolveApproval,
-} from '@/core/agent-sdk/approval-gate.js';
+} from '@/core/orchestration/approval-gate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

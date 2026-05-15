@@ -1,3 +1,3 @@
-import { runMigrations } from './client.js';
+import { runMigrations } from './client';
 
 runMigrations();

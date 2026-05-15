@@ -1,9 +1,9 @@
-import { sqlite } from '@/core/db/client.js';
+import { sqlite } from '@/core/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const REQUIRED_ENV = ['ANTHROPIC_API_KEY', 'AIBIO_ENCRYPTION_KEY'] as const;
+const REQUIRED_ENV = ['AIBIO_ENCRYPTION_KEY'] as const;
 
 export async function GET() {
   const timestamp = new Date().toISOString();

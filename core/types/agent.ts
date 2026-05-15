@@ -1,4 +1,10 @@
-export type SubagentName =
+export type CoordinatorName =
+  | 'explore-coordinator'
+  | 'model-coordinator'
+  | 'document-coordinator'
+  | 'quality-coordinator';
+
+export type AtomicAgentName =
   | 'schema-explorer'
   | 'data-profiler'
   | 'interviewer'
@@ -7,9 +13,13 @@ export type SubagentName =
   | 'sql-writer'
   | 'transformation-suggester'
   | 'test-generator'
-  | 'code-generator';
+  | 'code-generator-syntax'
+  | 'code-generator-semantic';
 
-export type ActorName = SubagentName | 'supervisor';
+/** @deprecated Use AtomicAgentName — kept for incremental migration */
+export type SubagentName = AtomicAgentName;
+
+export type ActorName = AtomicAgentName | CoordinatorName | 'supervisor';
 
 export type AIMode = 'auto' | 'documentation' | 'queries' | 'manual';
 
@@ -22,7 +32,8 @@ export type AgentContext = {
   workspaceId: string;
   agentName: ActorName;
   sessionId: string;
-  activeMode: AIMode;
+  aiMode: AIMode;
+  activeModule: string;
   tokenCounter: TokenCounter;
   tokenLimit: number;
 };
