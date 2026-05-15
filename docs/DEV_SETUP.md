@@ -11,6 +11,7 @@
 | Node.js | 20 LTS | `brew install node` alebo `nvm install 20` |
 | npm | 10+ | Dodávaný s Node.js |
 | Git | akákoľvek | `brew install git` |
+| Claude CLI | latest | `npm install -g @anthropic-ai/claude-code` (vyžaduje Claude Pro/Max subscription) |
 
 **Nie je potrebné pre základný dev:** Docker, DuckDB CLI — DuckDB beží embedded cez `duckdb-async` npm package.
 
@@ -37,7 +38,32 @@ npm install
 
 ---
 
-## 2. Environment variables
+## 2. Autentifikácia — Claude Code OAuth
+
+AIBIo používa Claude Code OAuth subscription — žiadne API key nie je potrebné.
+
+### Nastavenie
+
+1. Nainštaluj Claude Code CLI (ak ešte nie je nainštalovaný):
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+
+2. Prihlás sa (raz, uloží OAuth token lokálne):
+   ```bash
+   claude login
+   ```
+
+3. Overenie (Claude Agent SDK automaticky použije OAuth token):
+   ```bash
+   claude --version
+   ```
+
+SDK automaticky detekuje OAuth token z Claude Code — žiadna ďalšia konfigurácia nie je potrebná.
+
+---
+
+## 3. Environment variables
 
 Skopíruj template a vyplň hodnoty:
 
@@ -49,7 +75,6 @@ Obsah `.env.local`:
 
 ```bash
 # Povinné
-ANTHROPIC_API_KEY=sk-ant-...        # Claude API key z console.anthropic.com
 AIBIO_ENCRYPTION_KEY=               # 32-byte base64 key — generovať: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 # Voliteľné — defaults fungujú pre lokálny vývoj
@@ -61,7 +86,7 @@ NODE_ENV=development
 
 ---
 
-## 3. Databáza
+## 4. Databáza
 
 Drizzle migrácie sa spúšťajú automaticky pri štarte dev servera (`core/db/migrate.ts` je volaný v `app/layout.tsx` server component).
 
@@ -93,7 +118,7 @@ rm workspaces/{workspaceId}/datamart.duckdb
 
 ---
 
-## 4. Demo dataset (Chinook)
+## 5. Demo dataset (Chinook)
 
 Pre rýchly štart bez vlastného dátového zdroja je k dispozícii Chinook demo dataset — štandardná hudobná databáza s 11 tabuľkami (~4 000 riadkov), vhodná na testovanie všetkých modulov.
 
@@ -121,7 +146,7 @@ npm run db:migrate && npm run seed
 
 ---
 
-## 5. Spustenie dev servera (bez demo datasetu)
+## 6. Spustenie dev servera (bez demo datasetu)
 
 ```bash
 npm run dev
@@ -133,7 +158,7 @@ Next.js dev server sa automaticky reštartuje pri zmenách v `app/` a `modules/`
 
 ---
 
-## 6. Štruktúra workspaces
+## 7. Štruktúra workspaces
 
 Workspace-scoped súbory (SQL modely, test YAML, lineage) sú uložené v:
 
@@ -156,7 +181,7 @@ Tento priečinok je v `.gitignore` (runtime dáta). Pre verziovanie modelov a te
 
 ---
 
-## 7. Testovanie jednotlivých modulov
+## 8. Testovanie jednotlivých modulov
 
 ### Connect — test source connection
 
@@ -182,7 +207,7 @@ Tento priečinok je v `.gitignore` (runtime dáta). Pre verziovanie modelov a te
 
 ---
 
-## 8. Nástroje pre vývoj
+## 9. Nástroje pre vývoj
 
 ### Drizzle Studio (DB GUI)
 
@@ -208,7 +233,7 @@ npm run test:watch      # Vitest watch mode
 
 ---
 
-## 9. Časté problémy
+## 10. Časté problémy
 
 ### `better-sqlite3` alebo `duckdb-async` sa nepodarilo skompilovať
 
@@ -221,9 +246,9 @@ rm -rf node_modules
 npm install
 ```
 
-### `ANTHROPIC_API_KEY` nie je nastavený
+### Claude Agent SDK nedokáže autentifikovať
 
-App vyhodí `Error: ANTHROPIC_API_KEY is required` pri prvom volaní AI. Skontroluj `.env.local`.
+App vyhodí chybu autentifikácie pri prvom volaní AI. Spusti `claude login` a overiť pomocou `claude --version`. OAuth token sa uloží lokálne a SDK ho použije automaticky.
 
 ### SQLite "database is locked"
 
@@ -242,7 +267,7 @@ npm run dev -- -p 3001
 
 ---
 
-## 10. Pridanie nového sub-modulu (referencia)
+## 11. Pridanie nového sub-modulu (referencia)
 
 1. Vytvor `modules/ainderstanding/{module}/` s rovnakou štruktúrou ako existujúce moduly
 2. Definuj Drizzle schema v `{module}/db/schema.ts`

@@ -6,11 +6,13 @@
 
 ## MCP Tool Registry
 
-**CR-MCP-001** — Každý sub-modul registruje tools pri startup cez `registerTool()` z `core/agent-sdk/tool-registry.ts`.
+**CR-MCP-001** — Každý sub-modul registruje tools pri startup cez `registerTool()` z `core/orchestration/tool-registry.ts`.
 
 **CR-MCP-002** — `allowedCallers` v `registerTool()` je enforced at runtime. MCP server odmietne `tool_use` kde `agentName ∉ allowedCallers`. Zdroj pravdy pre allowedCallers: `MCP_TOOLS.md`.
 
-**CR-MCP-003** — Supervisor dostane iba tools kde `allowedCallers.includes('supervisor')`. Sub-agenti dostanú iba tools svojho owner sub-modulu. Žiadny agent nemôže volať tool iného modulu priamo — iba cez supervisor dispatch.
+**CR-MCP-003** — Supervisor dostane iba tools kde `allowedCallers.includes('supervisor')`. Atomic agents dostanú iba tools svojho owner sub-modulu. Phase Coordinators dostanú `Task` + read-only orchestration tools — žiadne write tools (write tools sú výlučne pre atomic agents). Žiadny atomic agent nemôže volať tool iného modulu priamo — iba cez coordinator alebo supervisor dispatch.
+
+**CR-MCP-004** — Phase Coordinator `allowedCallers` musí byť `['explore-coordinator']`, `['model-coordinator']`, atď. — konkrétny coordinator, nie generický `'coordinator'`. Atomické agents nemusia vedieť o existencii coordinatorov — coordinator je pre ne transparentný volajúci.
 
 ---
 

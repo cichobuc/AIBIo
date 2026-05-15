@@ -15,12 +15,13 @@ Technická foundation — žiadna business logika. Zodpovednosť za 4 oblasti: (
 - [x] `core/types/agent.ts` — `SubagentName`, `ActorName`, `AgentContext`, `TokenCounter`
 - [x] `core/types/permissions.ts` — `PermissionTier`, `ApprovalGateType`, `ApprovalGateDetails`, `PiiSubtype`, `ConfidenceLevel`
 - [x] `core/types/index.ts` — re-exporter
-- [x] `core/agent-sdk/mcp-server.ts` — singleton (`global.__aibio_mcp`), `InMemoryTransport`, `callTool()` wrapper s `withAgentContext`
-- [x] `core/agent-sdk/tool-registry.ts` — `registerTool / getTool / getAllTools / getToolsForAgent` (filter cez `allowedCallers`)
-- [x] `core/agent-sdk/approval-gate.ts` — `awaitApproval / resolveApproval / cleanupPendingGates`, 300s timeout, `ApprovalDeniedError`; promise vždy resolvuje, nikdy nerejektuje
-- [x] `core/agent-sdk/streaming.ts` — `WorkspaceSSEEmitter`, kompletný `SSEEvent` union vrátane `BaseSSEEvent` (sessionId, workspaceId, timestamp) na každom evente okrem `PingEvent`
-- [x] `core/agent-sdk/context.ts` — `AsyncLocalStorage` injektor, `withAgentContext`, `getAgentContext`, `recordTokenUsage`, `BudgetExceededError`
-- [x] `core/config.ts` — env validácia (`ANTHROPIC_API_KEY`, `AIBIO_ENCRYPTION_KEY`, `AIBIO_DB_PATH`, `AIBIO_WORKSPACES_PATH`)
+- [x] `core/orchestration/mcp-server.ts` — singleton (`global.__aibio_mcp`), `InMemoryTransport`, `callTool()` wrapper s `withAgentContext`
+- [x] `core/orchestration/tool-registry.ts` — `registerTool / getTool / getAllTools / getToolsForAgent` (filter cez `allowedCallers`)
+- [x] `core/orchestration/approval-gate.ts` — `awaitApproval / resolveApproval / cleanupPendingGates`, 300s timeout, `ApprovalDeniedError`; promise vždy resolvuje, nikdy nerejektuje
+- [x] `core/orchestration/streaming.ts` — `WorkspaceSSEEmitter`, kompletný `SSEEvent` union vrátane `BaseSSEEvent` (sessionId, workspaceId, timestamp) na každom evente okrem `PingEvent`
+- [x] `core/orchestration/context.ts` — `AsyncLocalStorage` injektor, `withAgentContext`, `getAgentContext`, `recordTokenUsage`, `BudgetExceededError`
+- [x] `core/config.ts` — env validácia (`AIBIO_ENCRYPTION_KEY`, `AIBIO_DB_PATH`, `AIBIO_WORKSPACES_PATH`)
+- [ ] Setup Claude Code OAuth autentifikáciu (`claude login`; pre CI/CD: `CLAUDE_CODE_OAUTH_TOKEN` secret)
 - [x] `core/db/client.ts` — Drizzle singleton nad `better-sqlite3` s `globalThis.__aibio_db` guard
 - [x] `core/db/migrate.ts` — `runMigrations()` cez drizzle migrator
 - [x] `core/db/encryption.ts` — AES-256-GCM `encrypt / decrypt` s typed errors

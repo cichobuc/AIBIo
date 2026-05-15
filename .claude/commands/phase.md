@@ -15,7 +15,7 @@ Arguments: $ARGUMENTS
 
 ## Steps to follow
 
-1. **Read the relevant doc** — identify the phase from `$ARGUMENTS`, then read the corresponding doc(s) from `docs/`. Phase 0 → read `docs/CORE.md` + `docs/SHELL.md`. Module phases → read `docs/<MODULE>/GOAL.md` + `docs/<MODULE>/RULES.md`.
+1. **Read the relevant doc** — identify the phase from `$ARGUMENTS`, then read the corresponding doc(s) from `docs/`. Phase P0a/P0b → read `docs/00-core/GOAL.md` + `docs/00-core/TODO.md`. Phase P0c/P0d → read `docs/01-shell/GOAL.md` + `docs/01-shell/TODO.md`. Module phases → read `docs/<NN>-<module>/GOAL.md` + `docs/<NN>-<module>/TODO.md`.
 
 2. **Audit existing code** — check `src/` (or `core/`, `app/`) for what already exists for this phase. Use `find` and `grep` to avoid duplicating work.
 
@@ -30,7 +30,7 @@ Arguments: $ARGUMENTS
 ## Key invariants (never break these)
 
 - All tool handlers wrapped in try/catch, emit `stream_error` SSE on failure
-- All data access to source DBs goes through `core/agent-sdk/` — never raw query in modules
+- All data access to source DBs goes through `core/orchestration/` — never raw query in modules
 - GDPR: query results require `awaitApproval()` before returning to LLM
 - No `any` types, no `var`, no `console.log` in production code
 - Package manager: `npm` only

@@ -16,7 +16,7 @@
 - Full refresh (incremental je out of MVP)
 - **Manuálny SQL editor** (Monaco) — user vie editovať priamo, AI nemá monopol
 
-Model je primárny owner **3 z 9 subagentov** AInderstandingu a má najväčší implementation effort.
+Model je primárny owner **`model-coordinator`** (Tier 2) a **3 Tier 3 atomic agentov** (`model-architect`, `sql-writer`, `transformation-suggester`) — najväčší implementation effort zo všetkých sub-modulov.
 
 ---
 

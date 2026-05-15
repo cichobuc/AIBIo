@@ -19,12 +19,15 @@ Shell rieši 4 veci ktoré nepatria do žiadneho konkrétneho sub-modulu:
 
 ## 2. Koncepty
 
-- **Active sub-module** — ktorý sub-modul je aktuálne otvorený (URL-driven). Supervisor ho berie do úvahy pri intent classification — keď je aktívny Model a user napíše *"prepíš staging SQL"*, supervisor vie že ide o `sql-writer`.
+- **Active sub-module** — ktorý sub-modul je aktuálne otvorený (URL-driven). Supervisor ho berie do úvahy pri intent classification — keď je aktívny Model a user napíše *"prepíš staging SQL"*, supervisor vie že ide o `model-coordinator`.
 - **AI mode** — globálny filter na správanie subagentov. Štyri hodnoty: `auto`, `documentation`, `queries`, `manual`. Viď tabuľku efektov v [ARCHITECTURE.md](../ARCHITECTURE.md).
-- **Supervisor** — hlavný orchestrátor agent (`claude-sonnet-4-6`). Dostáva user message + workspace state + active sub-module + AI mode. Volá subagentov ako `tool_use` calls (Agent tool cez SDK). Nikdy sám nepíše do DB ani do files — to robia subagenti cez MCP tools.
-- **Intent classification** — supervisor krok pred dispatchom. Analyzuje čo user chce: *browse* (len čítanie), *model build* (model-architect + sql-writer), *doc session* (interviewer + docs-keeper), *test gen* (test-generator), *multi-step* (kombinácia). Output je structured dispatch plan.
-- **Dispatch plan** — interný struct: `[{ subagent, tools, parallelGroup? }]`. Paralelné subagenty dostanú `parallelGroup` — supervisor ich invokuje concurrently a čaká na všetky.
-- **Session** — jedna agentic session = jeden user message → supervisor run → 0-N subagent calls → stream_end. Každá session má `sessionId` pre audit log koreláciu.
+- **Supervisor (Conductor)** — Tier 1 orchestrátor (model: `"sonnet"`). Dostáva user message + workspace state + active sub-module + AI mode. Klasifikuje intent a dispatchuje na Phase Coordinators (Tier 2) alebo priamo na atomic agents pri jednoduchých úlohách. Nikdy sám nepíše do DB ani do files.
+- **Phase Coordinator** — Tier 2 agent (AgentDefinition s `Task` v tools). Každý coordinator vlastní jednu fázu: `explore-coordinator`, `model-coordinator`, `document-coordinator`, `quality-coordinator`. Coordinator drží intra-phase working memory (retry state, session history, coverage tracking) a orchestruje atomic agents vo svojej fáze. Má rovnaký tvar ako atomic agents — je to AgentDefinition registrovaný v tej istej `agents` mape v parent `query()` calle.
+- **Atomic agent** — Tier 3 specialist (AgentDefinition bez `Task` v tools). Vykonáva jednu špecifickú funkciu — schema discovery, data profiling, SQL authoring, documentation Q&A, atď. Nevie o existencii coordinatorov — coordinator je pre neho transparentný volajúci.
+- **Swarm Host** — rola `document-coordinator`. Orchestruje `interviewer ↔ docs-keeper` iteratívnu slučku: každé kolo interviewer vygeneruje záznamy, docs-keeper ich zapíše, coordinator kontroluje coverage a spustí ďalšie kolo ak `assess_readiness.ready ≠ true`. Max 10 kôl.
+- **Intent classification** — supervisor krok pred dispatchom. Output je DispatchPlan s jedným z modov: `manual_only`, `direct_agent`, `coordinator`, `multi_phase`. Iba `multi_phase` vyžaduje LLM fallback.
+- **Dispatch plan** — interný struct: `{ mode, target?: agentName | coordinatorName, steps?: [] }`. Pre `coordinator` mode supervisor zavolá `Task(coordinatorName, context)` — coordinator potom riadi intra-phase orchestráciu samostatne.
+- **Session** — jedna agentic session = jeden user message → supervisor run → 0-N coordinator/agent calls → stream_end. Každá session má `sessionId` pre audit log koreláciu.
 
 ---
 
@@ -53,15 +56,26 @@ Shell rieši 4 veci ktoré nepatria do žiadneho konkrétneho sub-modulu:
 
 ## 4. Agenti
 
-### Supervisor
+### Tier 1 — Supervisor (Conductor)
 
 | Field | Value |
 |---|---|
-| Model | `claude-sonnet-4-6` |
-| Tools | Všetky read-only tools + `invoke_subagent` (Agent tool) + post-processing tools (`parse_lineage`, `update_coverage`, `run_tests`, `materialize_models`) |
-| Scope | Workspace-level context, orchestrácia, žiadne priame writes |
+| Model | `"sonnet"` (alias) |
+| Tools | Read-only MCP tools + `Task` (SDK built-in) + `mcp__aibio__validate_sql`, `mcp__aibio__parse_lineage`, `mcp__aibio__materialize_models`, `mcp__aibio__run_tests`, `mcp__aibio__read_coverage_summary`, `mcp__aibio__guarded_share_results` |
+| Scope | Intent classification → DispatchPlan → Phase Coordinator or direct agent dispatch; cross-phase approval gate serialization |
 
-Supervisor **nikdy** nepoužíva `write_model_file`, `write_test_file`, `write_doc_record` priamo — vždy cez subagenta. Toto je invariant na úrovni system promptu aj tool list-u (write tools sú z tool listu supervisora vynechané).
+Supervisor **nikdy** nevolá write tools priamo — vždy cez coordinatora alebo atomic agenta. Supervisor tiež nevolá `update_coverage` ani `test_failure_handoff` priamo — tieto sú vlastnené `document-coordinator` a `quality-coordinator` (BR-SHL-001, BR-SHL-002).
+
+### Tier 2 — Phase Coordinators
+
+| Coordinator | Model | Phase | Key pattern |
+|---|---|---|---|
+| `explore-coordinator` | Haiku | Explore (E1–E2) | sequential schema → parallel profiling |
+| `model-coordinator` | Sonnet | Model (M1–M3) | architect → parallel writers → suggester → self-heal |
+| `document-coordinator` | Sonnet | Document (D1–D3) | Swarm Host: interviewer ↔ docs-keeper loop |
+| `quality-coordinator` | Sonnet | Test (T1–T2) | parallel test-gen → run tests → self-heal |
+
+Každý coordinator je `AgentDefinition` s `Task` v tools. Detailné specifikácie: [AGENT_PROMPTS.md §Phase Coordinators — Tier 2](../AGENT_PROMPTS.md).
 
 Detailná supervisor state machine, AI modes efekt na subagentov, intent classifier, a dispatch flow → [ARCHITECTURE.md](../ARCHITECTURE.md) sekcie 7 a 15.
 
@@ -112,18 +126,18 @@ Phase P0 je spoločná s `core/` (CORE.md Phase P0a+b), spolu ~2 dni.
 
 ## 7. Open questions
 
-- **Intent classification LLM vs rule-based** — rule-based je rýchle a lacné ale missne edge cases. LLM-based je pomalšie (+300ms) ale robustnejšie. *Predbežne:* rule-based s LLM fallback. Ak `classifyIntent` vráti `mode === 'multi_agent'` (fallback), supervisor LLM rozhodne. Merať fallback rate v prvých sessions.
+- **Intent classification LLM vs rule-based** — rule-based je rýchle a lacné ale missne edge cases. LLM-based je pomalšie (+300ms) ale robustnejšie. *Predbežne:* rule-based s LLM fallback. Ak `classifyIntent` vráti `mode === 'multi_phase'` (fallback), supervisor LLM rozhodne o sekvencii coordinator/agent calls. Merať fallback rate v prvých sessions.
 - **Chat history v GlobalChatPanel** — zobraziť všetky správy od začiatku workspace alebo len poslednú session? *Predbežne:* posledná session + "Load history" button pre staršie. DB retenciu riešiť s `chat_messages` clean-up policy.
 - **Concurrent sessions** — čo ak user otvorí workspace v dvoch taboch? *Predbežne:* second tab zobrazí existujúci SSE stream (subscribe na rovnaký workspace channel), supervisor sessions sú serialized (druhý POST počká). Locking follow-up.
 - **Supervisor system prompt dĺžka** — workspace state summary môže byť dlhý (schémy, modely, docs). *Predbežne:* summary je abbreviated (table names + counts, nie full schema). Full schema dostanú subagenti keď ho explicitne potrebujú cez `read_schema_snapshot` tool.
-- **Streaming supervisor LLM response** — supervisor sám streamuje text pred tým ako volá subagenta? *Predbežne áno* — supervisor môže streamer-ovať *"OK, spúšťam data profiling na 3 tabuľkách..."* pred dispatch-om. Implementovať cez `stream: true` na Anthropic client.
+- **Streaming supervisor LLM response** — supervisor sám streamuje text pred tým ako volá subagenta? *Predbežne áno* — supervisor môže streamer-ovať *"OK, spúšťam data profiling na 3 tabuľkách..."* pred dispatch-om. Implementovať cez async iterátor z `query()` — `core/orchestration/streaming.ts` mapuje events na SSE frames.
 
 ---
 
 ## 8. Riziká
 
 - **Supervisor hallucination pri dispatchingu** — supervisor zavolá nesprávneho subagenta alebo vymyslí tool ktorý neexistuje. *Mitigation:* tool list je pevne definovaný (nie dynamický), system prompt obsahuje explicitný capability map (kedy volať koho), intent classifier pred LLM callom redukuje ambiguitu.
-- **Parallel approval gate Deny propagation** — ak dva paralelné subagenti oba trigger-ujú approval gate, supervisor ich serializuje do fronty (nie concurrent). Deny alebo timeout (300 s) na prvom gate → supervisor okamžite zamieta všetky ostatné pending gaty, abortuje všetky in-flight invokácie a emituje `stream_error`. Celý dispatch cyklus sa ukončí — nie iba jeden gate. Implementačné detaily v `ARCHITECTURE.md §7 Parallel Approval Gate Handling`.
+- **Parallel approval gate Deny propagation** — ak dva paralelné subagenti oba trigger-ujú approval gate, supervisor ich serializuje do fronty (nie concurrent). Deny alebo timeout (300 s) na prvom gate → supervisor okamžite zamieta všetky ostatné pending gaty, abortuje všetky in-flight invokácie a emituje `stream_error`. Celý dispatch cyklus sa ukončí — nie iba jeden gate. Implementačné detaily v `ARCHITECTURE.md §7 — Two-Level Approval Gate Serialization`.
 - **SSE event ordering pri parallel dispatch** — events z viacerých subagentov prídu interleaved, frontend môže renderovať zmätene. *Mitigation:* každý `agent_message` event má `agentName` field, frontend renderuje per-agent thread view keď sú aktívne viaceré agents súčasne.
 - **Session state loss pri server restart** — in-memory session state (supervisor state machine) sa stratí. *Mitigation:* reštart je detekovaný keď frontend dostane `stream_error` na EventSource, user dostane *"Session interrupted. Continue?"* prompt, nová session začne s plným workspace kontextom z DB.
 - **Supervisor tool call loop** — supervisor opakuje rovnaký tool call donekonečna. *Mitigation:* max_turns limit na Anthropic API call (nastaviť rozumne, napr. 20 turns), po prekročení `stream_error` s popisom.
@@ -140,17 +154,17 @@ Phase P0 je spoločná s `core/` (CORE.md Phase P0a+b), spolu ~2 dni.
 | Session idle timeout | `workspace_settings.session_timeout_min` | `[Polish]` | 60 min | Idle session cleanup |
 | Chat history retention | `workspace_settings.chat_history_retention_count` | `[Polish]` | 100 messages | Per workspace |
 | Chat panel width | `localStorage` only | `[Polish]` | 360px | Nastavuje sa drag handlerom, nie cez Settings |
-| Supervisor model | hardcoded | `[Polish]` | `claude-sonnet-4-6` | Locked v MVP, žiadny DB stĺpec |
+| Supervisor model | hardcoded | `[Polish]` | `"sonnet"` alias | Locked v MVP, žiadny DB stĺpec |
 
 ---
 
 ## 10. Glossary
 
-- **Supervisor** — hlavný orchestrátor agent, `claude-sonnet-4-6`, dispatchuje subagentov, drží workspace kontext
+- **Supervisor** — hlavný orchestrátor agent, model `"sonnet"`, deleguje na subagentov cez `Task` tool, drží workspace kontext
 - **Active sub-module** — sub-modul aktuálne zobrazený v UI (URL-driven), ovplyvňuje intent classification
 - **AI mode** — `auto` / `documentation` / `queries` / `manual`; globálny filter ktorých subagentov supervisor môže zavolať
 - **Intent classification** — sync, rule-based analýza user message → structured dispatch plan
-- **Dispatch plan** — ordered list subagentov s ich task context a optional `parallelGroup`
+- **Dispatch plan** — interný struct `{ mode, target?, steps? }`: `mode` je jeden z `manual_only | direct_agent | coordinator | multi_phase`; `target` je meno coordinator alebo atomic agenta; `steps` je ordered list pre `multi_phase` mode
 - **Session** — jedna agentic run: user message → supervisor → 0-N subagent calls → stream_end
 - **ApprovalDialog** — modal zobrazený keď approval gate čaká; blokuje chat input
 

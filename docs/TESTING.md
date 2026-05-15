@@ -72,7 +72,7 @@ Konvencia: `*.test.ts` pre Vitest, `*.spec.ts` pre Playwright.
 ### Príklad
 
 ```typescript
-// core/agent-sdk/__tests__/unit/validate-sql.test.ts
+// core/orchestration/__tests__/unit/validate-sql.test.ts
 import { describe, it, expect } from 'vitest';
 import { validateSql } from '../../validate-sql';
 
@@ -141,29 +141,35 @@ beforeEach(() => {
 | parse_lineage + cycle detection | Real SQLite + skutočné model súbory v temp dir |
 | Coverage formula end-to-end | Real SQLite s doc records |
 
-### Mock Anthropic API
+### Mock Claude Agent SDK
 
 ```typescript
 // vitest.setup.ts
 import { vi } from 'vitest';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  Anthropic: vi.fn().mockImplementation(() => ({
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: 'Mocked response' }],
-        stop_reason: 'end_turn',
-      }),
-    },
-  })),
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  query: vi.fn(),
 }));
+
+// Default stub — prepiš v konkrétnom teste
+vi.mocked(query).mockImplementation(async function* () {
+  yield { type: 'message_delta', delta: { text: 'Mocked response' }, agentName: 'test-agent' };
+});
 ```
 
 Pre testy konkrétnych agentov používaj factory pre rôzne response scenarios:
 
 ```typescript
-function mockAgentResponse(toolCalls: ToolUse[]) {
-  // vráti sekvenciu: tool_use → tool_result → end_turn
+function mockAgentResponse(agentName: string, toolCalls: ToolUse[]) {
+  vi.mocked(query).mockImplementationOnce(async function* () {
+    // vráti sekvenciu: tool_use → tool_result → message_delta → done
+    for (const tc of toolCalls) {
+      yield { type: 'tool_use', ...tc, agentName };
+      yield { type: 'tool_result', toolName: tc.name, output: '{}', agentName };
+    }
+    yield { type: 'message_delta', delta: { text: 'Done' }, agentName };
+  });
 }
 ```
 
@@ -181,7 +187,7 @@ export const fakePostgresAdapter = {
 ### Príklad — approval gate test
 
 ```typescript
-// core/agent-sdk/__tests__/integration/approval-gate.test.ts
+// core/orchestration/__tests__/integration/approval-gate.test.ts
 import { awaitApproval, resolveApproval } from '../../approval-gate';
 
 it('resolves when approved within timeout', async () => {
@@ -241,11 +247,11 @@ export default defineConfig({
 
 ### AI mocking v E2E
 
-E2E testy tiež mockujú Anthropic API — nie cez vi.mock, ale cez MSW (Mock Service Worker) alebo Next.js route handler mock:
+E2E testy tiež mockujú Claude Agent SDK — nie cez vi.mock, ale cez MSW (Mock Service Worker) alebo Next.js route handler mock, ktorý interceptuje interný `query()` call a vracia deterministické SSE eventy:
 
 ```typescript
-// app/__tests__/e2e/helpers/mock-anthropic.ts
-// Intercept fetch voči api.anthropic.com a vráti deterministické SSE eventy
+// app/__tests__/e2e/helpers/mock-agent-sdk.ts
+// MSW handler: intercept interný query() volanie a vráti deterministický stream eventov
 ```
 
 ### Príklad — SSE stream test
@@ -304,15 +310,16 @@ Rovnaká mock stratégia ako ostatné agenti (viď sekciu vyššie). Pre Transla
 
 ```typescript
 // translate/__tests__/helpers/mock-code-generator.ts
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { vi } from 'vitest';
+
 function mockCodeGeneratorResponse(languageId: string, snippet: string) {
-  vi.mocked(anthropic.messages.create).mockResolvedValueOnce({
-    content: [{ type: 'text', text: JSON.stringify({
-      languageId,
-      snippet,
-      confidence: 'high',
-      limitations: [],
-    }) }],
-    stop_reason: 'end_turn',
+  vi.mocked(query).mockImplementationOnce(async function* () {
+    yield {
+      type: 'message_delta',
+      delta: { text: JSON.stringify({ languageId, snippet, confidence: 'high', limitations: [] }) },
+      agentName: 'code-generator',
+    };
   });
 }
 ```
@@ -361,7 +368,7 @@ it('marks result as timeout, not failed', async () => {
 
 | Oblasť | Target |
 |--------|--------|
-| `core/agent-sdk/` | 90% |
+| `core/orchestration/` | 90% |
 | `govern/` guarded tools | 85% |
 | `core/types/` | 70% |
 | `connect/` adapters | 70% |

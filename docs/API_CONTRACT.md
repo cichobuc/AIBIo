@@ -848,7 +848,7 @@ Tieto headery sú logované do `audit_entries` pre každý API call voči govern
 ## `awaitApproval` — server-side kontrakt
 
 ```typescript
-// core/agent-sdk/approval-gate.ts
+// core/orchestration/approval-gate.ts
 
 type ApprovalResult = {
   decision: 'approved' | 'denied';

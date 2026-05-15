@@ -54,10 +54,8 @@ chat_messages: {
 
 ## DuckDB patterns
 ```typescript
-// Always parameterize queries — never string interpolation
-conn.all('SELECT * FROM ? LIMIT ?', [tableName, 100])  // WRONG — DuckDB uses $1 style
-conn.all('SELECT * FROM $1 LIMIT $2', [tableName, 100])  // WRONG — identifiers can't be params
-// Correct: use identifier quoting for table names
+// Identifiers (table/column names) cannot be parameters — quote them manually.
+// Only values go in the params array.
 const quoted = `"${tableName.replace(/"/g, '""')}"` 
 conn.all(`SELECT * FROM ${quoted} LIMIT $1`, [100])
 

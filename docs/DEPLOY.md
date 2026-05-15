@@ -14,8 +14,9 @@
 4. [Kubernetes — GKE nasadenie](#4-kubernetes--gke-nasadenie)
 5. [Ingress — Traefik](#5-ingress--traefik)
 6. [CI/CD — GitHub Actions](#6-cicd--github-actions)
-7. [Environment variables referencia](#7-environment-variables-referencia)
-8. [Operácie](#8-operácie)
+7. [Authentication — Claude Code OAuth (produkcia / headless)](#7-authentication--claude-code-oauth-produkcia--headless)
+8. [Environment variables referencia](#8-environment-variables-referencia)
+9. [Operácie](#9-operácie)
 
 ---
 
@@ -174,7 +175,7 @@ Nikdy necommituj hodnoty do gitu. Použij `kubectl create secret` alebo External
 ```bash
 kubectl create secret generic aibio-secrets \
   --namespace=aibio \
-  --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
+  --from-literal=CLAUDE_CODE_OAUTH_TOKEN=<token> \
   --from-literal=AIBIO_ENCRYPTION_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
 ```
 
@@ -189,7 +190,7 @@ metadata:
   namespace: aibio
 type: Opaque
 stringData:
-  ANTHROPIC_API_KEY: "sk-ant-..."
+  CLAUDE_CODE_OAUTH_TOKEN: "<token>"
   AIBIO_ENCRYPTION_KEY: "..."
 ```
 
@@ -481,11 +482,25 @@ jobs:
 
 ---
 
-## 7. Environment variables referencia
+## 7. Authentication — Claude Code OAuth (produkcia / headless)
+
+V produkčnom nasadení (headless/container) Claude Agent SDK vyžaduje OAuth token.
+
+### CI/CD / Kubernetes
+
+Namiesto API key nastav OAuth credentials pre headless prostredie:
+- Premenná `CLAUDE_CODE_OAUTH_TOKEN` — nastav ako K8s secret (viď sekcia 4.2) alebo CI/CD secret
+- Alternatíva: `claude login --token <token>` ako init container krok pred spustením app
+
+> Poznámka: Overiť v claude.ai/settings ako exportovať OAuth token pre headless nasadenie.
+
+---
+
+## 8. Environment variables referencia
 
 | Premenná | Povinná | Default | Popis |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | ✅ | — | Claude API kľúč. App odmietne naštartovať bez neho. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | ✅ (prod) | — | OAuth token pre Claude Code (headless/container). V lokálnom vývoji nie je potrebný — `claude login` uloží token automaticky. |
 | `AIBIO_ENCRYPTION_KEY` | ✅ | — | 32-byte base64 kľúč pre AES-256-GCM šifrovanie DB credentials. Generovanie: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
 | `AIBIO_DB_PATH` | ❌ | `./aibio.db` | Cesta k SQLite metadata databáze. V kontajneri: `/data/aibio.db` |
 | `AIBIO_WORKSPACES_PATH` | ❌ | `./workspaces` | Root adresár pre workspace súbory (SQL modely, YAML testy, DuckDB). V kontajneri: `/data/workspaces` |
@@ -494,7 +509,7 @@ jobs:
 
 ---
 
-## 8. Operácie
+## 9. Operácie
 
 ### Zálohovanie
 

@@ -3,7 +3,7 @@
 > **Phase:** D1 (DB + auto-populate) + D2 (agents) + D3 (UI)
 > **Status:** not started
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
-> **Cross-refs:** ../ARCHITECTURE.md §6.5, ../DATABASE_SCHEMA.md §7 (doc tables + chat_messages), ../MCP_TOOLS.md §Document, ../API_CONTRACT.md §chat §stream, ../AGENT_PROMPTS.md §7–8
+> **Cross-refs:** ../ARCHITECTURE.md §6.5, ../DATABASE_SCHEMA.md §7 (doc tables + chat_messages), ../MCP_TOOLS.md §Document, ../API_CONTRACT.md §chat §stream, ../AGENT_PROMPTS.md §4–5 (interviewer, docs-keeper)
 
 ## 1. Účel
 
@@ -79,33 +79,46 @@ Konverzačná governance dokumentácia. `docs-keeper` (Haiku) počúva chat sess
 
 ### 4.2 MCP tools (`modules/ainderstanding/document/lib/mcp-tools.ts`)
 
-- [ ] `read_docs` — čítanie existujúcich doc records pre daný `data_source_id` a/alebo `table_name`; `allowedCallers: ['interviewer', 'docs-keeper', 'model-architect', 'supervisor']`; Layer 1 — žiadny permission check
-- [ ] `write_doc_record` — uloží nový doc record (table/column/term/relationship/convention):
+- [ ] `read_docs` — čítanie existujúcich doc records; `allowedCallers: ['interviewer', 'docs-keeper', 'model-architect', 'sql-writer', 'test-generator']`; Layer 1 — žiadny permission check
+- [ ] `write_doc_record` — uloží nový doc record:
   - Conditional approval gate: `awaitApproval('write_to_docs', ...)` IBA ak `confidence < 'high'` (BR-DOC-070, BR-GOV-061)
   - Deduplication: ak record pre daný (source, table, column) už existuje → update, nie duplicate
   - Throttling: max 5 writes per sekunda z jedného docs-keeper (BR-DOC-031)
-  - `allowedCallers: ['docs-keeper', 'interviewer']`
-- [ ] `update_doc_record` — update existujúceho záznamu; rovnaké approval podmienky ako `write_doc_record`
-- [ ] `update_coverage` — prepočíta coverage formula pre workspace; SSE emit `coverage_update { coveragePct }`; `allowedCallers: ['supervisor', 'docs-keeper']`
-- [ ] `assess_readiness` — vráti `{ coveragePct, isReady: boolean, gaps: string[] }`; gaps = tabuľky s < 50% coverage alebo bez description; `allowedCallers: ['supervisor', 'interviewer']`
+  - `allowedCallers: ['docs-keeper']` (write je výhradne docs-keeper — nie interviewer priamo)
+- [ ] `update_doc_record` — update existujúceho záznamu; rovnaké approval podmienky; `allowedCallers: ['docs-keeper']`
+- [ ] `update_coverage` — prepočíta coverage; SSE emit `coverage_update`; `allowedCallers: ['docs-keeper']` (nie supervisor — patrí coordinator flow, BR-SHL-045a)
+- [ ] `assess_readiness` — `{ coveragePct, isReady: boolean, gaps: string[] }`; `allowedCallers: ['document-coordinator', 'interviewer', 'supervisor']`
+- [ ] `read_coverage_summary` — read-only coverage bez prepočtu; `allowedCallers: ['document-coordinator', 'supervisor']`
 
-### 4.3 Subagenti (`modules/ainderstanding/document/agents/`)
+### 4.3 Phase Coordinator (`modules/ainderstanding/document/agents/document-coordinator.ts`)
 
-- [ ] `interviewer.ts` — loop pattern:
-  - Model: `claude-sonnet-4-6`, temperature: `0.3`
+- [ ] `document-coordinator.ts` — Tier 2 coordinator, Swarm Host (BR-SHL-026):
+  - Model: `"sonnet"`, temperature: `0`
+  - System prompt: AGENT_PROMPTS.md §1d (`document-coordinator`)
+  - Tools: `['Task', 'mcp__aibio__assess_readiness', 'mcp__aibio__read_coverage_summary']`
+  - Swarm Loop (max 10 rounds):
+    1. `Task('interviewer', { session_history, workspace_context })` → `{ docs_to_write, session_complete }`
+    2. `Task('docs-keeper', { docs_to_write })` → `{ coverage_after }`
+    3. `assess_readiness` → ak `ready=true` alebo `session_complete=true` → terminate
+    4. Convergence check: ak coverage delta < 2% pre 2 po sebe idúce roundy → terminate
+  - PostToolUse hook (na coordinator úrovni): po každom `write_doc_record` / `update_doc_record` → `update_coverage`
+  - Session history: akumuluje `{ q, a }` páry a odovzdáva `interviewer`-u v každom kole
+  - Po ukončení vráti supervisorovi kompaktný súhrn `{ roundsCompleted, finalCoverage, recordsWritten }`
+
+### 4.4 Atomic Agents (`modules/ainderstanding/document/agents/`)
+
+- [ ] `interviewer.ts` — volaný `document-coordinator`-om (nie supervisorom priamo):
+  - Model: `"sonnet"`, temperature: `0.3`
   - System prompt: AGENT_PROMPTS.md §7
-  - Granted tools: `read_docs`, `read_profiles` (z Explore), `assess_readiness`, `write_doc_record` (pre priame odpovede usera)
-  - Flow: `assess_readiness` → identifikuj priority gaps → kladenie otázok (1–3 per turn, max 5 sérií) → persist odpovede
-  - Prioritizácia: PK/FK stĺpce → sensitive columns → business-relevant tables → edge cases
-  - Verbosity: `brief` default (BR-DOC-021 — max 2 vety per otázka)
-  - Ukončenie: keď `coveragePct >= threshold` alebo user povie "stop"
+  - Granted tools: `read_docs`, `read_profiles`, `assess_readiness` (read-only — nepíše nič)
+  - Flow: prijme `session_history` → identifikuj priority gaps → vygeneruj 1–3 otázky → vráti `{ docs_to_write, session_complete }` coordinator-u
+  - Prioritizácia: PK/FK stĺpce → sensitive columns → business tables
 
-- [ ] `docs-keeper.ts` — parallel listening pattern:
-  - Model: `claude-haiku-4-5-20251001`
+- [ ] `docs-keeper.ts` — volaný `document-coordinator`-om po každom `interviewer` kole:
+  - Model: `"haiku"`
   - System prompt: AGENT_PROMPTS.md §8
   - Granted tools: `read_docs`, `write_doc_record`, `update_doc_record`, `update_coverage`
-  - Flow: počúva každú chat správu + context; identifikuje hodnotné informácie; zapíše do príslušného record type
-  - Paralelné spustenie: jedna inštancia per data source počas session (BR-DOC-030)
+  - Prijme `docs_to_write` z interviewer → zapíše do DB → vráti `{ coverage_after }` coordinator-u
   - Explicit source identifier v každom call (anti-context-bleed — BR-DOC-030)
   - Deduplication pred write (porovnaj s existujúcim `read_docs`)
 

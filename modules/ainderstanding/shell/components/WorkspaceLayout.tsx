@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { useSSEStream } from '../hooks/useSSEStream';
@@ -14,6 +14,12 @@ import { BottomPanel } from './BottomPanel';
 import { StatusBar } from './StatusBar';
 import { CommandPalette } from './CommandPalette';
 
+// react-resizable-panels v4 treats defaultSize as pixel units.
+// We measure the container before mount and convert percentages to pixels.
+function pct(containerPx: number, percentage: number) {
+  return Math.round(containerPx * (percentage / 100));
+}
+
 export function WorkspaceLayout({
   workspaceId,
   children,
@@ -24,16 +30,32 @@ export function WorkspaceLayout({
   const init = useWorkspaceStore((s) => s.init);
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen);
   const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen);
+  const bottomPanelOpen = useWorkspaceStore((s) => s.bottomPanelOpen);
 
-  // Initialize workspace on mount
+  // Defer panel group render to after first layout so the container has real
+  // pixel dimensions and defaultSize calculations are correct.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [hPx, setHPx] = useState({ sidebar: 200, chat: 280 });
+  const [vPx, setVPx] = useState({ bottom: 150 });
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (el) {
+      setHPx({
+        sidebar: pct(el.clientWidth, 19),
+        chat: pct(el.clientWidth, 26),
+      });
+      setVPx({ bottom: pct(el.clientHeight, 22) });
+    }
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     init(workspaceId);
   }, [workspaceId, init]);
 
-  // SSE stream connection
   useSSEStream(workspaceId);
-
-  // Global keyboard shortcuts
   useKeyboardShortcuts(workspaceId);
 
   return (
@@ -43,49 +65,66 @@ export function WorkspaceLayout({
       <div className="flex flex-1 overflow-hidden">
         <ActivityBar workspaceId={workspaceId} />
 
-        <ResizablePanelGroup orientation="horizontal" className="flex-1">
-          {sidebarOpen && (
-            <>
-              <ResizablePanel
-                defaultSize={19}
-                minSize={14}
-                maxSize={37}
-                collapsible
-                onResize={(size) => { if (size.asPercentage === 0) useWorkspaceStore.getState().setSidebarOpen(false); }}
-              >
-                <PrimarySidebar />
-              </ResizablePanel>
-              <ResizableHandle />
-            </>
-          )}
+        <div ref={containerRef} className="relative min-w-0 flex-1 overflow-hidden">
+          {mounted && (
+            <ResizablePanelGroup direction="horizontal" className="absolute inset-0">
+              {sidebarOpen && (
+                <>
+                  <ResizablePanel
+                    id="sidebar"
+                    defaultSize={hPx.sidebar}
+                    minSize={pct(hPx.sidebar + hPx.chat + 400, 14)}
+                    collapsible
+                    onResize={(size) => { if (size.asPercentage === 0) useWorkspaceStore.getState().setSidebarOpen(false); }}
+                  >
+                    <PrimarySidebar />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                </>
+              )}
 
-          <ResizablePanel minSize={30}>
-            <div className="flex h-full flex-col overflow-hidden">
-              <div className="flex-1 overflow-auto">{children}</div>
-              <BottomPanel />
-            </div>
-          </ResizablePanel>
+              <ResizablePanel id="main">
+                <ResizablePanelGroup direction="vertical">
+                  <ResizablePanel id="content">
+                    <div className="h-full overflow-auto">{children}</div>
+                  </ResizablePanel>
 
-          {chatPanelOpen && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel
-                defaultSize={26}
-                minSize={20}
-                maxSize={43}
-                collapsible
-                onResize={(size) => { if (size.asPercentage === 0) useWorkspaceStore.getState().setChatPanelOpen(false); }}
-              >
-                <GlobalChatPanel workspaceId={workspaceId} />
+                  {bottomPanelOpen && (
+                    <>
+                      <ResizableHandle withHandle />
+                      <ResizablePanel
+                        id="bottom"
+                        defaultSize={vPx.bottom}
+                        collapsible
+                        onResize={(size) => { if (size.asPercentage === 0) useWorkspaceStore.getState().setBottomPanelOpen(false); }}
+                      >
+                        <BottomPanel />
+                      </ResizablePanel>
+                    </>
+                  )}
+                </ResizablePanelGroup>
               </ResizablePanel>
-            </>
+
+              {chatPanelOpen && (
+                <>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel
+                    id="chat"
+                    defaultSize={hPx.chat}
+                    collapsible
+                    onResize={(size) => { if (size.asPercentage === 0) useWorkspaceStore.getState().setChatPanelOpen(false); }}
+                  >
+                    <GlobalChatPanel workspaceId={workspaceId} />
+                  </ResizablePanel>
+                </>
+              )}
+            </ResizablePanelGroup>
           )}
-        </ResizablePanelGroup>
+        </div>
       </div>
 
       <StatusBar workspaceId={workspaceId} />
 
-      {/* Global overlays */}
       <ApprovalDialog />
       <CommandPalette workspaceId={workspaceId} />
     </div>

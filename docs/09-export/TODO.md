@@ -84,7 +84,7 @@ No-lock-in promise — balíčkuje celý datamart do `.zip` archívu s deploymen
 
 ### 4.4 Lib — X2–X8 post-MVP (`modules/ainderstanding/export/lib/format-packagers/`)
 
-Pre každý formát: skontroluj snippet cache (`read_snippets`) → cache hit: reuse; cache miss: invoke `code-generator` cez `invoke_subagent`; ak generation failne: warning v `manifest.json`, export pokračuje bez tohto formátu.
+Pre každý formát: skontroluj snippet cache (`read_snippets`) → cache hit: reuse; cache miss: invoke `code-generator-syntax` / `code-generator-semantic` cez `Task` tool; ak generation failne: warning v `manifest.json`, export pokračuje bez tohto formátu.
 
 - [ ] `format-packagers/python.ts` — X2 (pandas/polars/pyspark/sqlalchemy/dbt):
   - Per model: snippet z cache alebo generate

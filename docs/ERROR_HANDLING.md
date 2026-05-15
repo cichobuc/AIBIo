@@ -21,7 +21,7 @@
 |-----|--------------|---------|
 | `SOURCE_UNREACHABLE` | Connect adapters | DB nedostupná (sieť, credentials, firewall) |
 | `SQLITE_LOCKED` | core/db | Paralelný write do SQLite (WAL mode by mal eliminovať, ale nie vždy) |
-| `ANTHROPIC_API_ERROR` | agent-sdk | HTTP 5xx od Anthropic API; rate limit (429) |
+| `AGENT_SDK_ERROR` | agent-sdk | Claude Agent SDK error: rate limit, overload, alebo interná chyba |
 | `SSE_CLIENT_DISCONNECTED` | streaming.ts | Browser zatvoril EventSource spojenie |
 | `INTERNAL_ERROR` | Kdekoľvek | Nečakané runtime exception |
 
@@ -57,7 +57,7 @@
 |---|---|---|---|---|
 | `SOURCE_UNREACHABLE` | 1 | 503 | SSE stream_error | Nie |
 | `SQLITE_LOCKED` | 1 | 500 | SSE stream_error | Áno (exponential, max 3×) |
-| `ANTHROPIC_API_ERROR` | 1 | 429 / 502 / 529 | SSE stream_error | Áno pre 429/529 (Retry-After); Nie pre 5xx |
+| `AGENT_SDK_ERROR` | 1 | 429 / 502 / 529 | SSE stream_error | Áno pre rate limit / overload (SDK retry); Nie pre 5xx |
 | `SSE_CLIENT_DISCONNECTED` | 1 | — | interné | — |
 | `INTERNAL_ERROR` | 1 | 500 | HTTP body + SSE stream_error | Nie |
 | `MANUAL_MODE_ACTIVE` | 2 | 400 | HTTP body | Nie |
@@ -124,20 +124,20 @@ db.pragma('busy_timeout = 5000'); // 5s timeout namiesto immediate fail
 
 ---
 
-### `ANTHROPIC_API_ERROR`
+### `AGENT_SDK_ERROR`
 
-**Kontext:** Kdekoľvek kde sa volá `messages.create()`.
+**Kontext:** Kdekoľvek kde sa volá `query()` z `@anthropic-ai/claude-agent-sdk`.
 
 **Sub-typy:**
 
-| HTTP status | Príčina | Recovery |
-|-------------|---------|----------|
-| `429` | Rate limit | Retry po `Retry-After` header (max 2×) |
-| `529` | Anthropic overloaded | Retry po 10s (max 1×) |
-| `5xx` | Anthropic internal | Emitovať `stream_error`, surfovať používateľovi |
-| `401` | Zlý API key | Okamžite failnúť, zobraziť settings link |
+| Príčina | Recovery |
+|---------|----------|
+| Rate limit | Claude Agent SDK má built-in retry; ak vyčerpá pokusy → emitovať `stream_error` |
+| Overload (529 ekvivalent) | SDK retry po backoff; po vyčerpaní → `stream_error` |
+| Interná chyba SDK / siete | Emitovať `stream_error`, surfovať používateľovi |
+| OAuth token neplatný / expirovaný | Okamžite failnúť; informovať používateľa: `claude login` je potrebný |
 
-**User-visible state:** "AI service temporarily unavailable. Please try again." + retry tlačidlo pre 429/529.
+**User-visible state:** "AI service temporarily unavailable. Please try again." + retry tlačidlo pre dočasné chyby.
 
 ---
 
@@ -326,7 +326,7 @@ type AuditEntry = {
 };
 ```
 
-Tier 1 infrastructure errors (napr. `ANTHROPIC_API_ERROR`) sú logované do Node.js console (nie do `audit_entries` — audit log je pre data access, nie pre service errors).
+Tier 1 infrastructure errors (napr. `AGENT_SDK_ERROR`) sú logované do Node.js console (nie do `audit_entries` — audit log je pre data access, nie pre service errors).
 
 ---
 

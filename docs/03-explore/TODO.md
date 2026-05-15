@@ -61,20 +61,32 @@ Tieto tools registrujú subagenti Explore, nie Govern. Prístup k dátam cez Gov
 - [ ] `read_schema_snapshot` — čítanie konkrétneho snapshot_json (Layer 1 — žiadny permission check)
 - [ ] `read_profiles` — čítanie `table_profiles` + `column_profiles` (Layer 1 — žiadny permission check)
 
-### 4.3 Subagenti (`modules/ainderstanding/explore/agents/`)
+### 4.3 Phase Coordinator (`modules/ainderstanding/explore/agents/explore-coordinator.ts`)
 
-- [ ] `schema-explorer.ts` — sequential pattern:
-  - Model: `claude-haiku-4-5-20251001`
+- [ ] `explore-coordinator.ts` — Tier 2 coordinator, orchestruje sequential schema → parallel profiling:
+  - Model: `"haiku"`, temperature: `0`
+  - System prompt: AGENT_PROMPTS.md §1b (`explore-coordinator`)
+  - Tools: `['Task', 'mcp__aibio__read_schema_snapshot']`
+  - Flow:
+    1. `Task('schema-explorer', { dataSourceId })` — sequential, počka na snapshot
+    2. `read_schema_snapshot` → získa zoznam tabuliek
+    3. Parallel `Task('data-profiler', { dataSourceId, tableBatch })` × N batches (concurrency 4)
+  - Vráti supervisorovi kompaktný súhrn `{ tablesDiscovered, tablesProfiled, piiCandidatesFound }`
+
+### 4.4 Atomic Agents (`modules/ainderstanding/explore/agents/`)
+
+- [ ] `schema-explorer.ts` — volaný `explore-coordinator`-om (alebo supervisorom pre single-source direct dispatch — BR-SHL-024a):
+  - Model: `"haiku"`
   - System prompt: AGENT_PROMPTS.md §2
   - Granted tools: `guarded_introspect_schema`, `guarded_read_native_comments`, `detect_schema_changes`, `read_schema_snapshot`
   - Flow: introspect → persist snapshot → diff s predchádzajúcim → SSE `schema_update`
   - Jeden invoke per source
 
-- [ ] `data-profiler.ts` — parallel pattern (N inštancií, jedna per table batch):
-  - Model: `claude-haiku-4-5-20251001`
+- [ ] `data-profiler.ts` — volaný `explore-coordinator`-om paralelne:
+  - Model: `"haiku"`
   - System prompt: AGENT_PROMPTS.md §3
   - Granted tools: `guarded_sample_data`, `run_profile_query`, `detect_pii_candidates`, `suggest_reference_table_flags`, `read_schema_snapshot`
-  - Flow: load snapshot → pre každú tabuľku: `run_profile_query` → `detect_pii_candidates` → `suggest_reference_table_flags`
+  - Flow: load snapshot → pre každú tabuľku v batchi: `run_profile_query` → `detect_pii_candidates` → `suggest_reference_table_flags`
   - Concurrency limit: `workspace_settings.parallel_build_concurrency` (default 4)
   - **Nikdy** `guarded_run_select_query` — len `run_profile_query` cez internal-adapter
 

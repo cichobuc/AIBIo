@@ -45,7 +45,7 @@ Tento sub-modul **definuje hard contract: AIBIo nikdy nezmení source DB**. Žia
 
 ## 4. Agenti
 
-**Žiadni subagenti.** Connect je pure infrastructure layer. Source adapters sú volané subagentmi v iných sub-moduloch (`schema-explorer` v Explore, `sql-writer` v Model, atď.) cez MCP tools registered v `core/agent-sdk/`.
+**Žiadni subagenti.** Connect je pure infrastructure layer. Source adapters sú volané subagentmi v iných sub-moduloch (`schema-explorer` v Explore, `sql-writer` v Model, atď.) cez MCP tools registered v `core/orchestration/`.
 
 ---
 

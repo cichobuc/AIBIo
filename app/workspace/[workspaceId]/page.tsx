@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export default function WorkspacePage({ params }: { params: { workspaceId: string } }) {
-  redirect(`/workspace/${params.workspaceId}/connect`);
+export default async function WorkspacePage({ params }: { params: Promise<{ workspaceId: string }> }) {
+  const { workspaceId } = await params;
+  redirect(`/workspace/${workspaceId}/connect`);
 }

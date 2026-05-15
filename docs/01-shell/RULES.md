@@ -8,7 +8,7 @@
 
 **BR-SHL-001** — Supervisor nikdy nevolá write tools priamo  
 Condition: Supervisor agent tool list  
-Rule: `write_model_file`, `write_test_file`, `write_doc_record` nie sú v tool liste supervisora. Priame volanie je technicky vylúčené — write tools sú vynechané z `tools` parametra Anthropic API call-u, nie len konvenčné.
+Rule: `write_model_file`, `write_test_file`, `write_doc_record` nie sú v tool liste supervisora. Priame volanie je technicky vylúčené — write tools sú vynechané z `allowedTools` parametra `query()` volania, nie len konvenčné.
 
 **BR-SHL-002** — Supervisor nikdy nepíše do DB ani do file systému  
 Condition: Akákoľvek akcia supervisora  
@@ -22,21 +22,21 @@ Rule: `max_turns = 20` (konfigurovateľné). Po dosiahnutí limitu → `stream_e
 
 ## AI mode rules
 
-**BR-SHL-010** — Manual mode deaktivuje všetkých subagentov  
+**BR-SHL-010** — Manual mode deaktivuje všetkých agentov  
 Condition: `ai_mode = 'manual'`  
-Rule: Chat input je disabled. Žiadny subagent nie je invokaný. Monaco editor v Model funguje normálne — manuálne zmeny sú povolené.
+Rule: Chat input je disabled. Supervisor neinvokuje žiadny coordinator ani atomic agent. Monaco editor v Model funguje normálne — manuálne zmeny sú povolené.
 
-**BR-SHL-011** — Documentation mode blokuje query subagentov  
+**BR-SHL-011** — Documentation mode blokuje query coordinatora a query atomic agentov  
 Condition: `ai_mode = 'documentation'`  
-Rule: Supervisor smie invokovať: `interviewer`, `docs-keeper`, `schema-explorer`, `data-profiler` (posledné dva read-only). `sql-writer`, `model-architect`, `transformation-suggester`, `test-generator` sú blokované. Supervisor informuje usera ak žiada query-related akciu.
+Rule: Supervisor smie invokovat: `document-coordinator` (a cez neho `interviewer`, `docs-keeper`), `explore-coordinator` (read-only — `schema-explorer`, `data-profiler`). `model-coordinator` a `quality-coordinator` sú blokované — žiadne SQL authoring, model design, test generation. Supervisor informuje usera ak žiada query-related akciu.
 
-**BR-SHL-012** — Queries mode blokuje doc subagentov  
+**BR-SHL-012** — Queries mode blokuje doc coordinatora a doc atomic agentov  
 Condition: `ai_mode = 'queries'`  
-Rule: Supervisor smie invokovať: `sql-writer`, `model-architect`, `transformation-suggester`, `test-generator`, `schema-explorer` (read-only), `data-profiler` (read-only). `interviewer`, `docs-keeper` sú blokované.
+Rule: Supervisor smie invokovat: `model-coordinator` (`model-architect`, `sql-writer`, `transformation-suggester`), `quality-coordinator` (`test-generator`), `explore-coordinator` (read-only — `schema-explorer`, `data-profiler`). `document-coordinator` (a cez neho `interviewer`, `docs-keeper`) je blokovaný.
 
 **BR-SHL-013** — AI mode je workspace-scoped a perzistovaný  
 Condition: AI mode setting  
-Rule: Mode je uložený per workspace v DB. Page reload alebo session restart zachová posledný nastavený mode.
+Rule: Mode je uložený per workspace v DB. Page reload alebo session restart zachová posledný nastavený mode. Coordinators preberajú aktívny AI mode z AgentContext pri každom volaní — nedrží vlastnú kópiu.
 
 ---
 
@@ -44,11 +44,11 @@ Rule: Mode je uložený per workspace v DB. Page reload alebo session restart za
 
 **BR-SHL-020** — Intent classification prebehne pred LLM callom  
 Condition: User odošle správu  
-Rule: Rule-based `classifyIntent()` prebehne synchronne. Ak výsledok je jednoznačný, supervisor dispatchuje priamo. LLM fallback nastane len ak `mode === 'multi_agent'` alebo klasifikácia nie je istá.
+Rule: Rule-based `classifyIntent()` prebehne synchronne. Výsledok je jeden z: `manual_only`, `direct_agent`, `coordinator`, `multi_phase`. Iba pri `multi_phase` nastane LLM fallback (supervisor LLM rozhoduje o sekvencii coordinator/agent calls).
 
 **BR-SHL-021** — Active sub-module informuje intent classification  
 Condition: User odošle správu keď je aktívny konkrétny sub-modul  
-Rule: Active sub-modul (URL-driven) je zahrnutý v classifier kontext. *"Prepíš staging SQL"* pri aktívnom Model = jednoznačne `sql-writer`.
+Rule: Active sub-modul (URL-driven) je zahrnutý v classifier kontext. *"Prepíš staging SQL"* pri aktívnom Model = jednoznačne `coordinator: model-coordinator`.
 
 **BR-SHL-022** — Paralelné subagenty dostanú identický workspace context snapshot  
 Condition: Parallel dispatch group  
@@ -56,7 +56,19 @@ Rule: Všetky subagenty v paralelnej groupe dostanú rovnaký workspace state sn
 
 **BR-SHL-023** — Parallel group approval gates sú serializované  
 Condition: Viacero paralelných subagentov trigger-uje approval gate súbežne  
-Rule: Gates sú serializované — jeden po druhom, nie súbežné dialogy. Deny na jednom gate emituje `stream_error` a abortuje zvyšné subagent calls.
+Rule: Gates sú serializované — jeden po druhom, nie súbežné dialogy. Deny na jednom gate emituje `stream_error` a abortuje zvyšné subagent calls. Platí na oboch úrovniach: coordinator-level aj supervisor-level.
+
+**BR-SHL-024** — Coordinator bypass je povolený iba pre explicitne definované simple-task prípady  
+Condition: Supervisor zvažuje priame volanie atomic agenta  
+Rule: Supervisor smie obísť coordinator iba pre: (a) single-source schema refresh (`schema-explorer` priamo), (b) standalone transformation hints na pomenovanom modeli (`transformation-suggester` priamo), (c) code generation request — Phase 2 (`code-generator-*` priamo). Pre VŠETKY ostatné multi-step alebo phase-spanning tasks ide cez coordinator.
+
+**BR-SHL-025** — Coordinator drží intra-phase working memory  
+Condition: Coordinator orchestruje viac atomic agentov  
+Rule: Coordinator context window (v rámci nested `query()`) drží intra-phase pracovný stav: výstupy predchádzajúcich krokov, retry counters, session_history. Supervisor nemusí sledovať tento stav — coordinator ho zapuzdruje. Po skončení coordinator vráti kompaktný súhrn supervisorovi.
+
+**BR-SHL-026** — `document-coordinator` Swarm Loop má max_rounds limit  
+Condition: `document-coordinator` orchestruje interviewer ↔ docs-keeper loop  
+Rule: Max 10 rounds per coordinator session. Ak po 10 roundoch `assess_readiness.ready` nie je `true`, coordinator skončí s partial result a informuje supervisora. Loop sa tiež ukončí ak: `session_complete = true` (user skončil), coverage delta < 2% pre 2 po sebe idúce roundy (convergencia), alebo coverage >= target.
 
 ---
 
@@ -82,9 +94,9 @@ Rule: Druhý POST do `/api/chat/[workspaceId]` čaká kým prvá session dokonč
 
 ## Auto mode a context rules
 
-**BR-SHL-040** — Auto mode dovoľuje všetkých subagentov  
+**BR-SHL-040** — Auto mode dovoľuje všetkých coordinatorov a atomic agentov  
 Condition: `ai_mode = 'auto'`  
-Rule: Supervisor môže invokovať akéhokoľvek z 9 subagentov podľa intent classification. Žiadny subagent nie je blokovaný. Toto je default mode pre nový workspace.
+Rule: Supervisor môže invokovať ktorýkoľvek zo 4 coordinatorov (a cez nich všetkých 8 MVP atomic agentov) podľa intent classification. Žiadny coordinator ani atomic agent nie je blokovaný. Toto je default mode pre nový workspace. Viď AI Mode tabuľku v `ARCHITECTURE.md §7`.
 
 **BR-SHL-041** — Supervisor context je abbreviated  
 Condition: Workspace state summary v supervisor system prompte  
@@ -102,13 +114,18 @@ Rule: Server emituje `{ type: 'ping' }` event každých 15 s. Zabraňuje browser
 Condition: `chat_messages` tabuľka per workspace  
 Rule: UI zobrazuje posledných 100 správ. Staršie sú dostupné cez "Load history" button. DB neobmedzuje počet — retenčná policy je view-level limit, nie delete.
 
-**BR-SHL-045** — Supervisor robí post-processing po dokončení subagentov  
-Condition: Subagent dokončí prácu  
-Rule: Supervisor volá post-processing tools podľa toho čo bežalo:  
-- Po `sql-writer` write → `parse_lineage` (rebuild lineage_edges)  
-- Po `docs-keeper` write → `update_coverage` (recompute coverage score)  
-- Po `materialize_models` success → `run_tests` (ak `auto_run_tests = true`)  
-Post-processing prebehne aj keď subagent dostal approval — nie len pri plnom úspechu.
+**BR-SHL-045** — Post-processing je dvojúrovňový: coordinator-owned a supervisor-owned  
+Condition: Atomic agent alebo supervisor dokončí svoju akciu  
+Rule:  
+**(a) Coordinator-owned post-processing** — prebieha vnútri coordinator context window, supervisor ho nevidí:  
+- `model-coordinator`: po každom `sql-writer` write → `parse_lineage` (rebuild lineage_edges pre práve zapísaný model)  
+- `document-coordinator`: po každom `docs-keeper` write → `update_coverage` (recompute coverage score pre workspace)  
+- `quality-coordinator`: po `test-generator` write → `run_tests` (ak `auto_run_tests = true`, inline self-heal loop)  
+
+**(b) Supervisor-owned post-processing** — cross-phase, prebieha po návrate coordinatora:  
+- Po `materialize_models` success → `run_tests` (ak `auto_run_tests = true` a quality-coordinator nebol volaný v tej istej session)  
+
+Post-processing (a) ani (b) nevyžaduje ďalší approval gate — prebehne automaticky keď predchádzajúci write step bol approved.
 
 **BR-SHL-047** — Chat input je disabled počas approval gate  
 Condition: `approval_required` SSE event prijatý frontendovým `ApprovalDialog`  

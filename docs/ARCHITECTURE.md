@@ -37,7 +37,7 @@ AIBIo is a **modular AI-native BI platform**. The active scope is **AInderstandi
 | **GDPR-first** | 3-layer data exposure model; AI sees only what user explicitly permits |
 | **No lock-in** | One-click export to dbt-compatible `.zip`; runnable with `dbt run` outside AIBIo |
 | **Strictly read-only** | SQL parser gate rejects any non-`SELECT` statement before it reaches source DBs |
-| **AI as partner** | Supervisor + 9 LLM subagentov (8 v MVP, `code-generator` v Phase 2); user always reviews and approves AI writes |
+| **AI as partner** | 1 Supervisor (Tier 1) + 4 Phase Coordinators (Tier 2) + 8 atomic LLM agents (Tier 3, MVP; +2 `code-generator-*` v Phase 2); user always reviews and approves AI writes |
 | **Full lifecycle** | Connect → Explore → Govern → Model → Document → Test → Translate → Export in one tool |
 
 ### Mental Model
@@ -85,11 +85,11 @@ AInderstanding draws from three paradigms:
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Anthropic SDK | `@anthropic-ai/sdk` | Claude API calls (`messages.create()` + streaming) |
-| MCP protocol | `@modelcontextprotocol/sdk` | In-process MCP server for tool registration |
-| Supervisor model | `claude-sonnet-4-6` | Orchestration, intent classification |
-| Haiku agents | `claude-haiku-4-5` | High-frequency low-cost tasks (schema, profiling, docs-keeper) |
-| Sonnet agents | `claude-sonnet-4-6` | Reasoning-heavy tasks (model design, SQL writing, test generation) |
+| Claude Agent SDK | `@anthropic-ai/claude-agent-sdk` | Agent orchestrácia — `query()`, `agents` parameter, MCP integrácia; autentifikácia cez Claude Code OAuth |
+| MCP protocol | `@modelcontextprotocol/sdk` | In-process MCP server for tool registration (`createSdkMcpServer()` + `tool()`) |
+| Supervisor model | `"sonnet"` | Orchestration, intent classification |
+| Haiku agents | `"haiku"` | High-frequency low-cost tasks (schema, profiling, docs-keeper) |
+| Sonnet agents | `"sonnet"` | Reasoning-heavy tasks (model design, SQL writing, test generation) |
 
 ### Testing & Build
 
@@ -221,7 +221,7 @@ aibio/
 ├── core/                                 # Foundation (no business logic)
 │   ├── types/                            # Shared TypeScript types
 │   ├── db/                               # Drizzle singleton + migrations
-│   ├── agent-sdk/                        # MCP server, approval gate, SSE emitter
+│   ├── orchestration/                    # MCP server, approval gate, SSE emitter
 │   └── ui/                              # Re-exported shadcn/ui primitives
 ├── modules/
 │   └── ainderstanding/
@@ -261,7 +261,7 @@ core/
 ├── db/
 │   ├── client.ts         # Drizzle singleton (better-sqlite3)
 │   └── migrate.ts        # Migration runner (called at app start)
-└── agent-sdk/
+└── orchestration/
     ├── mcp-server.ts     # McpServer singleton (InMemoryTransport)
     ├── tool-registry.ts  # registerTool() helper
     ├── approval-gate.ts  # awaitApproval() + resolveApproval()
@@ -290,7 +290,7 @@ shell/
 ├── hooks/
 │   ├── useWorkspaceContext.ts  # { workspaceId, activeModule, aiMode }
 │   └── useSSEStream.ts         # EventSource wrapper + typed event handler
-└── orchestrator.ts             # Supervisor agent (claude-sonnet-4-6)
+└── orchestrator.ts             # Supervisor agent (model: "sonnet")
 ```
 
 **Owns:** `workspace_settings` — user preferences, AI mode overrides, per-workspace config
@@ -405,82 +405,216 @@ No direct DB-to-DB query occurs. Cross-source models are always DuckDB-local dur
 
 ## 7. Multi-Agent Architecture
 
+### Why Two Tiers
+
+A flat supervisor dispatching directly to 9+ atomic agents creates unacceptable cognitive load: the supervisor's context window fills with every intermediate tool result from every agent, intra-phase coordination (e.g. `model-architect` feeding its output to N `sql-writer` instances) requires back-and-forth round trips through the top-level supervisor, and self-heal loops need phase-level working memory that the supervisor cannot maintain cleanly across unrelated concurrent dispatches. At the same time, pure Swarm — where every agent can freely hand off to any other — is inappropriate here: approval gates must be serialized and owned by a clear guardian, GDPR enforcement requires a predictable chain of custody for every data access decision, and the audit trail demands deterministic paths that a free-flowing Swarm topology cannot guarantee. The architecture therefore introduces a **two-tier orchestration model**: a Conductor supervisor at Tier 1 that understands user intent and phase boundaries, and four Phase Coordinators at Tier 2 that own intra-phase orchestration. Swarm is intentionally scoped to a single contained loop inside `document-coordinator` where its flexibility is safe and useful.
+
+### Architecture Diagram
+
+```
++------------------------------------------------------------------------------+
+|                      Tier 1 -- Supervisor (Conductor)                        |
+|                              model: sonnet                                   |
++----------+---------------+------------------+----------------+---------------+
+           |               |                  |                |
+        (Explore)       (Model)           (Document)        (Test)
+           |               |                  |                |
+           v               v                  v                v
++----------------+ +---------------+ +-----------------+ +--------------------+
+|    Tier 2      | |    Tier 2     | |    Tier 2       | |       Tier 2       |
+|  explore-      | |   model-      | |  document-      | |   quality-         |
+| coordinator    | | coordinator   | |  coordinator    | |   coordinator      |
+|  (Haiku)       | |  (Sonnet)     | |  (Sonnet)       | |   (Sonnet)         |
++-------+--------+ +-------+-------+ +--------+--------+ +----------+---------+
+        |                  |                  |                      |
+        | sequential       | sequential       | swarm loop           | parallel
+        |                  |                  |                      |
+   +----v----+        +----v-----+     +------v------+        +-----v----------+
+   | schema- |        |  model-  |     | interviewer |<--+    | test-          |
+   | explorer|        |architect |     +------+------+   |    | generator x N  |
+   +----+----+        +----+-----+            |          |    +-----+----------+
+        |                  |                  v          |          | on failure
+   +----v-----+       +----v------+    +-------------+  |    +-----v----------+
+   |  data-   |       | sql-      |    | docs-keeper +--+    |  sql-writer    |
+   | profiler |       | writer x N|    | (swarm loop)|       | (self-heal)    |
+   | x N      |       +-----+-----+    +-------------+       +----------------+
+   +----------+             |          (until assess_readiness.ready = true)
+                            | sequential
+                     +------v----------------+
+                     | transformation-       |
+                     |   suggester           |
+                     +-----------------------+
+                     (+ optional revision loop)
+```
+
+**Direct dispatch** (Tier 1 to atomic agent, no coordinator): `schema-explorer` for single-source schema refresh, `transformation-suggester` for standalone suggestion requests, `code-generator-syntax` / `code-generator-semantic` for on-demand translation.
+
 ### Agent Roster
 
-| Agent | Owner | Model tier | Primary tools | Workflow pattern |
-|---|---|---|---|---|
-| **supervisor** | shell/ | Sonnet 4.6 | All read tools + `invoke_subagent` + post-processing | Orchestrates all |
-| `schema-explorer` | Explore | Haiku | `guarded_introspect_schema`, `guarded_read_native_comments`, `detect_schema_changes` | Sequential |
-| `data-profiler` | Explore | Haiku | `run_profile_query`, `detect_pii_candidates`, `suggest_reference_table_flags` | **Parallel** (N tables) |
-| `interviewer` | Document | Sonnet | `read_docs`, `read_schema_snapshot`, `read_profiles` | Loop |
-| `docs-keeper` | Document | Haiku | `write_doc_record`, `update_doc_record`, `read_docs` | **Parallel** (N sources) |
-| `model-architect` | Model | Sonnet | `read_docs`, `read_profiles`, `propose_dimensional_model` | Conditional |
-| `sql-writer` | Model | Sonnet | `read_docs`, `read_profiles`, `read_schema_snapshot`, `read_existing_models`, `write_model_file` (gated), `guarded_run_select_query` | **Parallel** (N models) + Loop |
-| `transformation-suggester` | Model | Sonnet | `read_profiles`, `read_existing_models` | Conditional |
-| `test-generator` | Test | Sonnet | `read_schema_snapshot`, `read_profiles`, `read_docs`, `write_test_file` (gated) | Conditional |
-| `code-generator` | Translate | Haiku / Sonnet | `read_schema_snapshot`, `read_docs`, `read_existing_models`, `generate_snippet`, `read_snippets` | On-demand |
+#### Tier 1 — Conductor
 
-**Model tier rationale:** Haiku for high-frequency, low-reasoning tasks (schema reading, doc writing, simple syntax translation); Sonnet for reasoning-heavy tasks (model design, SQL authoring, test generation, semantic translation: DAX/KQL/complex Python). `code-generator` uses Haiku for SQL dialects and basic pandas/polars; Sonnet for DAX measures, KQL materialized views, ibis semantic translation.
+| Agent | Model | Role |
+|---|---|---|
+| **supervisor** | Sonnet | Classifies intent, builds DispatchPlan, dispatches to coordinators or directly to atomic agents for simple tasks. Owns cross-phase approval gate serialization. |
+
+#### Tier 2 — Phase Coordinators
+
+| Coordinator | Model | Owned phase | Internal pattern | Agents owned |
+|---|---|---|---|---|
+| `explore-coordinator` | Haiku | Explore | `schema-explorer` sequential then `data-profiler x N` parallel | schema-explorer, data-profiler |
+| `model-coordinator` | Sonnet | Model | `model-architect` then `sql-writer x N` parallel then `transformation-suggester` then optional revision | model-architect, sql-writer, transformation-suggester |
+| `document-coordinator` | Sonnet | Document | Swarm Host: `interviewer` and `docs-keeper` loop until `assess_readiness.ready = true` | interviewer, docs-keeper |
+| `quality-coordinator` | Sonnet | Test | `test-generator x N` parallel; failure triggers `sql-writer` self-heal path | test-generator, sql-writer (borrowed) |
+
+#### Tier 3 — Atomic Agents
+
+| Agent | Owner | Model | Primary tools | Invoked by |
+|---|---|---|---|---|
+| `schema-explorer` | Explore | Haiku | `guarded_introspect_schema`, `guarded_read_native_comments`, `detect_schema_changes` | `explore-coordinator` (sequential) or supervisor directly (single-source refresh) |
+| `data-profiler` | Explore | Haiku | `run_profile_query`, `detect_pii_candidates`, `suggest_reference_table_flags` | `explore-coordinator` (parallel x N tables) |
+| `interviewer` | Document | Sonnet | `read_docs`, `read_schema_snapshot`, `read_profiles` | `document-coordinator` (swarm loop) |
+| `docs-keeper` | Document | Haiku | `write_doc_record`, `update_doc_record`, `read_docs` | `document-coordinator` (swarm loop) |
+| `model-architect` | Model | Sonnet | `read_docs`, `read_profiles`, `propose_dimensional_model` | `model-coordinator` (sequential) |
+| `sql-writer` | Model | Sonnet | `read_docs`, `read_profiles`, `read_schema_snapshot`, `read_existing_models`, `write_model_file` (gated), `guarded_run_select_query` | `model-coordinator` (parallel x N models) or `quality-coordinator` (self-heal) |
+| `transformation-suggester` | Model | Sonnet | `read_profiles`, `read_existing_models` | `model-coordinator` (sequential) or supervisor directly (standalone suggestion) |
+| `test-generator` | Test | Sonnet | `read_schema_snapshot`, `read_profiles`, `read_docs`, `write_test_file` (gated) | `quality-coordinator` (parallel x N models) |
+| `code-generator-syntax` | Translate | Haiku | `read_schema_snapshot`, `read_docs`, `read_existing_models`, `generate_snippet`, `read_snippets` | supervisor directly (on-demand) |
+| `code-generator-semantic` | Translate | Sonnet | `read_schema_snapshot`, `read_docs`, `read_existing_models`, `generate_snippet`, `read_snippets` | supervisor directly (on-demand) |
 
 **`translate-validator`** is a **deterministic service** (not an LLM agent): Python `uv run --isolated` subprocess executor + DuckDB dialect runner + syntax parsers (DAX/KQL/M). It is not in the agent roster.
 
-### Intent Classification → Dispatch Flow
+### Phase Coordinator Architecture
+
+Coordinators are standard `AgentDefinition` objects — the same type as atomic agents — with `Task` included in their tools list. The SDK built-in `Task` tool allows a coordinator to delegate to another named agent resolved from the shared `agents` map passed to the top-level `query()` call.
+
+```typescript
+// shell/orchestrator.ts
+import { type AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
+
+const exploreCoordinator: AgentDefinition = {
+  name: 'explore-coordinator',
+  model: 'claude-haiku-4-5',
+  tools: ['Task'],  // built-in SDK delegation tool
+  system: [
+    {
+      type: 'text',
+      text: exploreCoordinatorSystemPrompt,
+      cache_control: { type: 'ephemeral' },
+    },
+  ],
+};
+
+// All agents -- coordinators and atomic -- share a single agents map.
+// When explore-coordinator calls Task('data-profiler', ...), the SDK
+// resolves 'data-profiler' from this map at any nesting depth.
+const supervisorAgents: Record<string, AgentDefinition> = {
+  'explore-coordinator': exploreCoordinator,
+  'model-coordinator': modelCoordinator,
+  'document-coordinator': documentCoordinator,
+  'quality-coordinator': qualityCoordinator,
+  'schema-explorer': schemaExplorer,
+  'data-profiler': dataProfiler,
+  // ... remaining atomic agents
+};
+```
+
+All agents — coordinators and atomic — are registered in the same flat `agents` map. There is no separate registry per tier. The SDK resolves `Task('sql-writer', ...)` from inside `model-coordinator` by looking up `sql-writer` in the same map the top-level supervisor used.
+
+### Document Coordinator — Swarm Loop
+
+`document-coordinator` acts as a **Swarm Host**: it owns a multi-round conversation loop between `interviewer` and `docs-keeper`, orchestrating each round explicitly rather than letting agents hand off freely. This preserves termination guarantees and session history consistency — two properties that a truly free Swarm cannot provide.
+
+The loop protocol:
+1. Coordinator calls `Task('interviewer', { session_history, schema_context, coverage_snapshot })` — interviewer generates the next targeted question and returns it.
+2. User responds in the GlobalChatPanel; response is appended to `session_history`.
+3. Coordinator calls `Task('docs-keeper', { session_history, pending_records })` — docs-keeper writes new documentation records and returns updated `coverage_snapshot`.
+4. Coordinator calls `assess_readiness({ coverage_snapshot })` — if `ready = false`, loop continues from step 1 with updated `session_history`.
+5. When `assess_readiness.ready = true`, coordinator emits `agent:done` and returns summary to supervisor.
+
+The coordinator — not the individual agents — enforces the termination condition. Neither `interviewer` nor `docs-keeper` knows how many rounds have occurred or what the coverage target is. This is the key reason Swarm is scoped here rather than used globally: `document-coordinator` is the single entity that can safely decide when to stop.
+
+```typescript
+// Coordinator passes full accumulated history each round so both agents
+// have complete context without storing state themselves.
+//
+// Round N:
+//   Task('interviewer', { session_history: [...rounds 1..N-1] })
+//   -> question_for_user
+//
+// After user responds:
+//   Task('docs-keeper', { session_history: [...rounds 1..N-1, user_answer] })
+//   -> { records_written, coverage_snapshot }
+//
+// assess_readiness({ coverage_snapshot })
+//   -> { ready: false } -> continue with session_history: [...rounds 1..N]
+//   -> { ready: true  } -> return to supervisor
+```
+
+### Dispatch Flow
 
 ```
 User message
       │
       ▼
 classifyIntent()  ──── sync rule-based, <50ms ────►  DispatchPlan
-      │                                               {mode, steps[]}
+      │                                               {mode, target, steps[]}
       │
-      ├── mode: manual_only  ──► "Manual mode active. Use Monaco editor."
+      ├── mode: manual_only
+      │         │
+      │         └──► "Manual mode active. Use Monaco editor."
       │
-      ├── mode: single_agent  ──► Direct subagent invocation
+      ├── mode: direct_agent   (simple, single-phase tasks)
+      │         │
+      │         └──► supervisor invokes atomic agent directly via Task
+      │              e.g. schema refresh -> schema-explorer
+      │                   translate request -> code-generator-syntax/semantic
+      │                   standalone suggestion -> transformation-suggester
       │
-      ├── mode: parallel  ──► Promise.all([...subagent invocations])
+      ├── mode: coordinator    (multi-step, single-phase tasks)
+      │         │
+      │         └──► supervisor invokes Phase Coordinator via Task
+      │              Coordinator handles all intra-phase orchestration
+      │              and approval gates within its phase
       │
-      └── mode: multi_agent (fallback)
-              │
-              ▼
-         Supervisor LLM call (claude-sonnet-4-6)
-              │ tool_use: invoke_subagent
-              ▼
-         Subagent execution
-              │
-              ▼
-         Post-processing (parse_lineage, update_coverage, run_tests)
-              │
-              ▼
-         stream_end SSE event
+      └── mode: multi_phase    (cross-phase requests, fallback)
+                │
+                ▼
+           Supervisor — query() volanie (model: "sonnet")
+                │ agents: supervisorAgents (coordinators + atomic)
+                ▼
+           Coordinator or atomic agent execution (AgentDefinition objekty)
+                │
+                ▼
+           Post-processing hooks (coordinator-owned: parse_lineage, update_coverage; supervisor-owned: run_tests)
+                │
+                ▼
+           stream_end SSE event
 ```
 
 ### AI Mode Effect on Dispatch
 
-| Subagent | Auto | Documentation | Queries | Manual |
+| Dispatch target | Auto | Documentation | Queries | Manual |
 |---|---|---|---|---|
-| `schema-explorer` | ✓ active | ✓ active | ✓ read-only | ✗ disabled |
-| `data-profiler` | ✓ active | ✓ active | ✓ read-only | ✗ disabled |
-| `interviewer` | ✓ active | **✓ primary** | ✗ disabled | ✗ disabled |
-| `docs-keeper` | ✓ active | **✓ primary** | ✗ disabled | ✗ disabled |
-| `model-architect` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
-| `sql-writer` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
-| `transformation-suggester` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
-| `test-generator` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
-| `code-generator` | ✓ active | ✗ disabled | ✗ disabled | ✗ disabled |
+| `explore-coordinator` | ✓ active | ✓ active | ✓ read-only | ✗ disabled |
+| `schema-explorer` (direct) | ✓ active | ✓ active | ✓ read-only | ✗ disabled |
+| `document-coordinator` | ✓ active | **✓ primary** | ✗ disabled | ✗ disabled |
+| `model-coordinator` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
+| `transformation-suggester` (direct) | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
+| `quality-coordinator` | ✓ active | ✗ disabled | **✓ primary** | ✗ disabled |
+| `code-generator-syntax` (direct) | ✓ active | ✗ disabled | ✗ disabled | ✗ disabled |
+| `code-generator-semantic` (direct) | ✓ active | ✗ disabled | ✗ disabled | ✗ disabled |
 
 **Manual mode:** no agent runs; chat input disabled; Monaco editor fully functional.
 
-### Parallel Approval Gate Handling
+### Approval Gate Handling
 
-When multiple parallel subagents both trigger an approval gate, the gates are **serialized** (not concurrent). Two simultaneous modal dialogs would be confusing. The supervisor queues pending gates in an internal `pendingGateQueue: ApprovalRequest[]` and presents one at a time.
+Approval gates are serialized at two levels.
 
-**Deny propagation:** If the user denies any gate in the queue (or a gate times out after 300 s without user action), the supervisor immediately:
-1. Rejects the waiting subagent with `ApprovalDeniedError`
-2. Discards all remaining entries in the pending gate queue (subsequent gates are never shown)
-3. Emits `stream_error` to abort all in-flight subagent invocations
-4. Transitions supervisor state back to `IDLE`
+**Coordinator-level (intra-phase):** Each Phase Coordinator serializes its own gates. `model-coordinator` spawns N parallel `sql-writer` instances; each instance triggers a `write_model_file` gate when it proposes a model file. The coordinator holds a `pendingGateQueue: ApprovalRequest[]` and presents one gate at a time. A deny at coordinator level aborts all in-flight `sql-writer` instances for that phase and propagates `ApprovalDeniedError` up to the supervisor.
 
-This means a single Deny (or timeout) on a parallel batch ends the entire dispatch cycle, not just the one gate.
+**Supervisor-level (cross-phase):** When multiple coordinators run concurrently (e.g. `explore-coordinator` and `document-coordinator` in parallel during initial source onboarding), the supervisor owns the cross-phase gate queue. Gates from different coordinators are serialized so the user never sees two approval dialogs simultaneously.
+
+**Deny propagation** at either level: the denying party immediately rejects the waiting agent with `ApprovalDeniedError`, discards all remaining entries in its pending gate queue, emits `stream_error` to abort all in-flight invocations in scope, and transitions state back to `IDLE`. A single Deny (or 300-second timeout) ends the entire dispatch cycle for that scope.
 
 ---
 
@@ -689,7 +823,7 @@ GlobalChatPanel → MessageList rendering
 
 ## 11. MCP Tool Registry
 
-All 28 MCP tools registered in AInderstanding. Sub-modules call `registerTool()` at startup. The supervisor receives only tools appropriate for its role (read-only + post-processing); subagents receive only tools registered for their owner sub-module.
+All 29 MCP tools registered in AInderstanding. Sub-modules call `registerTool()` at startup. The supervisor receives only tools appropriate for its role (read-only + post-processing); subagents receive only tools registered for their owner sub-module.
 
 > **Single source of truth for tool names, callers, TypeScript signatures, and error codes: [MCP_TOOLS.md](./MCP_TOOLS.md).** Do not duplicate the full tool table here — update MCP_TOOLS.md and it automatically reflects in the registry at runtime.
 
@@ -701,7 +835,7 @@ All 28 MCP tools registered in AInderstanding. Sub-modules call `registerTool()`
 | Explore | 6 | — |
 | Model | 6 | `write_model_file` |
 | Test | 3 | `write_test_file` |
-| Document | 5 | `write_to_docs` (conditional) |
+| Document | 6 | `write_to_docs` (conditional) |
 | Translate | 3 *(Phase 2)* | — |
 
 ### Registration Pattern
@@ -717,7 +851,21 @@ registerTool({
 });
 ```
 
-Callers list in `registerTool()` is enforced at runtime: the MCP server rejects any `tool_use` where `agentName` is not in `allowedCallers`.
+Callers list in `registerTool()` is enforced at runtime: the MCP server rejects any tool call where `agentName` is not in `allowedCallers`. Tools are exposed to the SDK via `createSdkMcpServer()` — the `allowedTools` parameter in each `query()` call restricts which registered tools each agent may invoke.
+
+### Orchestration Adapter Layer (`core/orchestration/`)
+
+`core/orchestration/` obsahuje **custom adaptery nad `@anthropic-ai/claude-agent-sdk`** — nie je to npm package, je to interný AIBIo adapter layer. Každý súbor má jednu zodpovednosť:
+
+| Súbor | Rola |
+|---|---|
+| `approval-gate.ts` | Exportuje `approvalGateCanUseTool: CanUseToolCallback` — predávaný do `query()` options; blokuje tool execution kým user neschváli v UI. Tiež `awaitApproval()` a `ApprovalDeniedError`. (→ [AGENT_PROMPTS.md §Approval gate via canUseTool](./AGENT_PROMPTS.md)) |
+| `streaming.ts` | Mapuje SDK async iterátor events na SSE frames (`agent:thinking`, `agent:tool_call`, atď.) |
+| `context.ts` | Wraps `query()` s `AsyncLocalStorage` AgentContext — `workspaceId`, `sessionId`, `aiMode` dostupné v každom tool handleri |
+| `tool-registry.ts` | Registruje tools pre `createSdkMcpServer()` — centrálny zoznam s `allowedCallers` enforcement |
+| `mcp-server.ts` | `McpServer` singleton vytvorený cez `createSdkMcpServer()` — in-process, nulová latencia |
+
+Adresár je `core/orchestration/` — adaptér vrstva nad `@anthropic-ai/claude-agent-sdk` patrí do orchestration doménu, nie do sdk package namespace.
 
 ---
 
@@ -946,6 +1094,113 @@ interviewer asks question
 - Low cardinality categorical → `accepted_values` test
 - Identified FK in lineage → `foreign_key` test
 
+### SDK Hooks Pipeline
+
+Post-processing steps are registered as **deterministic `PostToolUse` hooks** — not prompt instructions. This ensures they run reliably regardless of model output.
+
+```typescript
+// core/orchestration/hooks.ts
+export const supervisorHooks: SdkHooks = {
+  PostToolUse: [
+    {
+      matcher: 'mcp__aibio__write_model_file',
+      hooks: [async (_input, _output, ctx) => {
+        await callMcpTool('mcp__aibio__parse_lineage', { workspace_id: ctx.workspaceId });
+      }],
+    },
+    {
+      matcher: 'mcp__aibio__materialize_models',
+      hooks: [async (_input, _output, ctx) => {
+        await callMcpTool('mcp__aibio__run_tests', { workspace_id: ctx.workspaceId });
+      }],
+    },
+  ],
+};
+```
+
+| Hook trigger | Post-processing action | Owner |
+|---|---|---|
+| `mcp__aibio__write_model_file` | `parse_lineage` (rebuild lineage graph) | `model-coordinator` PostToolUse |
+| `mcp__aibio__materialize_models` | `run_tests` | supervisor PostToolUse |
+
+`update_coverage` je **nie** supervisor hook — volá ho `document-coordinator` vnútri Swarm Loop po každom `docs-keeper` write (BR-SHL-045).
+
+`PreToolUse` hooks for consent enforcement are handled via the `canUseTool` callback on `query()` (see `core/orchestration/approval-gate.ts`), not `PreToolUse` hooks.
+
+### Nested Supervisor
+
+A Phase Coordinator is an `AgentDefinition` with `Task` in its tools list, registered alongside atomic agents in the parent `supervisorAgents` map. When the SDK resolves a `Task('data-profiler', ...)` call issued by `explore-coordinator`, it looks up `data-profiler` from the same shared map — there is no separate nested registry. This means all agents, regardless of tier, are addressable at any nesting depth.
+
+```typescript
+// shell/orchestrator.ts
+const supervisorAgents: Record<string, AgentDefinition> = {
+  // Tier 2 — coordinators
+  'explore-coordinator': exploreCoordinator,   // has tools: ['Task']
+  'model-coordinator': modelCoordinator,       // has tools: ['Task']
+  'document-coordinator': documentCoordinator, // has tools: ['Task']
+  'quality-coordinator': qualityCoordinator,   // has tools: ['Task']
+  // Tier 3 — atomic agents (resolved by coordinators via Task)
+  'schema-explorer': schemaExplorer,
+  'data-profiler': dataProfiler,
+  'model-architect': modelArchitect,
+  'sql-writer': sqlWriter,
+  'transformation-suggester': transformationSuggester,
+  'interviewer': interviewer,
+  'docs-keeper': docsKeeper,
+  'test-generator': testGenerator,
+  'code-generator-syntax': codeGeneratorSyntax,
+  'code-generator-semantic': codeGeneratorSemantic,
+};
+
+// Top-level supervisor query — all agents share this map
+const result = query({
+  model: 'claude-sonnet-4-6',
+  system: supervisorSystem,
+  agents: supervisorAgents,
+  // ...
+});
+```
+
+The `agents` map is passed once at the top level. All `Task` calls at any depth resolve from this same map. Coordinators do not need to know whether their sub-agents are themselves coordinators or atomic agents.
+
+### Swarm Loop
+
+`document-coordinator` is the **Swarm Host** for the `interviewer ↔ docs-keeper` loop. The coordinator drives each round explicitly, passing accumulated `session_history` to both agents so neither needs internal state. The termination condition (`assess_readiness.ready = true`) is enforced by the coordinator, not by the agents themselves.
+
+```typescript
+// document-coordinator internal loop (pseudocode in coordinator system prompt logic)
+//
+// The coordinator orchestrates rounds until coverage target is reached:
+//
+// Round 1:
+//   Task('interviewer', {
+//     session_history: [],           // empty on first round
+//     schema_context,
+//     coverage_snapshot,
+//   })
+//   -> { question_for_user }
+//
+//   [user answers in GlobalChatPanel]
+//
+//   Task('docs-keeper', {
+//     session_history: [{ q: question_for_user, a: user_answer }],
+//     pending_records,
+//   })
+//   -> { records_written, coverage_snapshot }
+//
+//   assess_readiness({ coverage_snapshot })
+//   -> { ready: false } -> proceed to Round 2
+//
+// Round N (ready):
+//   assess_readiness({ coverage_snapshot })
+//   -> { ready: true } -> emit agent:done, return summary to supervisor
+//
+// Key invariant: session_history grows by one { q, a } pair each round.
+// Both agents receive the full history every time -- no shared mutable state.
+```
+
+The Swarm pattern is confined to `document-coordinator`. Other coordinators use explicit sequential or parallel `Task` dispatch, not free agent handoffs, because their approval gate serialization and phase-level context management require deterministic control flow.
+
 ---
 
 ## 16. Security Model
@@ -985,7 +1240,7 @@ npm run dev    # Next.js dev server on localhost:3000
 ```
 
 - SQLite `aibio.db` in project root (configurable via `AIBIO_DB_PATH`)
-- `ANTHROPIC_API_KEY` environment variable required
+- Autentifikácia cez Claude Code OAuth (`claude login`) — žiadny `ANTHROPIC_API_KEY`, žiadna kreditová fakturácia
 - DuckDB datamart per workspace at `workspaces/{id}/datamart.duckdb`
 - Single-user, single-workspace typical usage
 
@@ -999,7 +1254,7 @@ npm run dev    # Next.js dev server on localhost:3000
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | (required) | Claude API access |
+| ~~`ANTHROPIC_API_KEY`~~ | — | Nie je potrebný — autentifikácia cez Claude Code OAuth (`claude login`) |
 | `AIBIO_ENCRYPTION_KEY` | (required) | 32-byte base64 key pre AES-256-GCM šifrovanie credentials; app odmietne naštartovať bez nej |
 | `AIBIO_DB_PATH` | `./aibio.db` | SQLite database location |
 | `AIBIO_WORKSPACES_PATH` | `./workspaces` | Root directory for workspace-scoped files (SQL models, test YAML, DuckDB). Override in containers: `/data/workspaces` |

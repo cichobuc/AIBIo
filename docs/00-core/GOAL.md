@@ -34,10 +34,10 @@
 
 - `core/types/` — zdieľané TypeScript typy (Workspace, DataSource, AgentContext, PermissionTier, AIMode, ...)
 - `core/db/` — Drizzle klient, migrácie, re-export schemát zo všetkých sub-modulov
-- `core/agent-sdk/mcp-server.ts` — in-process MCP server setup (`@modelcontextprotocol/sdk`)
-- `core/agent-sdk/tool-registry.ts` — centrálny tool registry + helper pre registráciu nových tools
-- `core/agent-sdk/approval-gate.ts` — approval gate mechanizmus (Promise + SSE event)
-- `core/agent-sdk/streaming.ts` — SSE emitter utilities (per-workspace event channel)
+- `core/orchestration/mcp-server.ts` — in-process MCP server setup (`@modelcontextprotocol/sdk`)
+- `core/orchestration/tool-registry.ts` — centrálny tool registry + helper pre registráciu nových tools
+- `core/orchestration/approval-gate.ts` — approval gate mechanizmus (Promise + SSE event)
+- `core/orchestration/streaming.ts` — SSE emitter utilities (per-workspace event channel)
 - `core/ui/` — re-export shadcn/ui komponentov ktoré používajú viaceré moduly (`Button`, `Dialog`, `Badge`, `Tooltip`, `ScrollArea`, `Separator`, `Sheet`)
 
 ### Out of scope
@@ -79,11 +79,11 @@ Phase P0 je spoločná s `shell/` (shell/GOAL.md), spolu ~2 dni.
 
 ### Phase P0b: MCP + Approval gate + SSE — ~4 hodiny
 
-- `core/agent-sdk/mcp-server.ts` — McpServer singleton
-- `core/agent-sdk/tool-registry.ts` — registerTool() helper
-- `core/agent-sdk/approval-gate.ts` — awaitApproval() + resolveApproval()
-- `core/agent-sdk/streaming.ts` — WorkspaceSSEEmitter
-- `core/agent-sdk/context.ts` — AsyncLocalStorage injector
+- `core/orchestration/mcp-server.ts` — McpServer singleton
+- `core/orchestration/tool-registry.ts` — registerTool() helper
+- `core/orchestration/approval-gate.ts` — awaitApproval() + resolveApproval()
+- `core/orchestration/streaming.ts` — WorkspaceSSEEmitter
+- `core/orchestration/context.ts` — AsyncLocalStorage injector
 - `app/api/stream/[workspaceId]/route.ts` — SSE endpoint
 - `app/api/approvals/[requestId]/route.ts` — approval resolution endpoint
 - Integration test: registerTool → awaitApproval → SSE event → resolveApproval → tool continues
@@ -94,7 +94,7 @@ Phase P0 je spoločná s `shell/` (shell/GOAL.md), spolu ~2 dni.
 
 ## 7. Open questions
 
-- **`@anthropic-ai/sdk` vs hypotetický `claude-agent-sdk`** — používame `@anthropic-ai/sdk` (štandardný Anthropic SDK). Neexistuje separátny `claude-agent-sdk` package. Subagenti sú implementovaní ako `messages.create()` calls s `tool_use` — "Agent tool" je len `messages.create()` kde tools obsahujú invoke_subagent. MCP je z `@modelcontextprotocol/sdk`.
+- **`@anthropic-ai/claude-agent-sdk` ako primárny orchestračný layer** — používame `@anthropic-ai/claude-agent-sdk`. Supervisor a subagenti sú definovaní cez `query()` s `agents` parametrom (typ `Record<string, AgentDefinition>`). Žiadny manuálny `tool_use` loop ani `messages.create()`. Autentifikácia prebieha cez Claude Code OAuth subscription (`claude login`) — žiadny `ANTHROPIC_API_KEY`, žiadna kreditová fakturácia. MCP server je registrovaný cez `createSdkMcpServer()` + `tool()` helper z `@modelcontextprotocol/sdk`.
 - **AsyncLocalStorage pre AgentContext** — je spoľahlivý v Next.js App Router? *Predbežne áno* pre Route Handlers (nie Edge Runtime). Alternatíva: explicitne predávať `ctx` každému tool handleru ako parameter — verbóznejšie ale bezpečnejšie. *Rozhodnúť pri P0b.*
 - **MCP server singleton vs per-request** — jeden globálny McpServer alebo nový per agentic session? *Predbežne singleton* pre simplicity, tool registration je statická. Ak vzniknú state problémy pri concurrent sessions, prejsť na per-session.
 - **`better-sqlite3` + Next.js bundling** — `better-sqlite3` je native addon, vyžaduje `serverExternalPackages: ['better-sqlite3']` v `next.config.ts`. *Explicitne nastaviť v P0a.*

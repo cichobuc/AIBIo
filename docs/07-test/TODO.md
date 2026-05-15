@@ -55,14 +55,27 @@ dbt-like data quality framework. 4 generic tests (`unique`, `not_null`, `foreign
 
 ### 4.2 MCP tools (`modules/ainderstanding/test/lib/mcp-tools.ts`)
 
-- [ ] `write_test_file` — gate: `awaitApproval('write_test_file', { testName, testKind, tableName, columnName, sql? })`; zapíše `.yml` alebo `.sql` súbor do `workspaces/{id}/tests/`; uloží `tests` záznam; `allowedCallers: ['test-generator']`
-- [ ] `run_tests` — spustí testy (všetky alebo filter na model); SSE `test_run_update` per test; vráti `TestRunResult`; `allowedCallers: ['supervisor', 'test-generator']`
-- [ ] `test_failure_handoff` — pripraví GDPR-aware failure summary pre sql-writer: `{ testName, tableName, columnName, failureCount, failureReason }` — **nikdy** sample rows; `allowedCallers: ['supervisor']`
+- [ ] `write_test_file` — gate: `awaitApproval('write_test_file', { testName, testKind, tableName, columnName, sql? })`; zapíše `.yml` alebo `.sql` súbor; uloží `tests` záznam; `allowedCallers: ['test-generator']` (nie coordinator priamo)
+- [ ] `run_tests` — spustí testy; SSE `test_run_update` per test; `allowedCallers: ['quality-coordinator', 'supervisor']`
+- [ ] `test_failure_handoff` — GDPR-aware failure summary pre sql-writer; **nikdy** sample rows; `allowedCallers: ['quality-coordinator']` (nie supervisor — self-heal je intra-phase, BR-SHL-001/002)
 
-### 4.3 Subagent (`modules/ainderstanding/test/agents/test-generator.ts`)
+### 4.3 Phase Coordinator (`modules/ainderstanding/test/agents/quality-coordinator.ts`)
 
-- [ ] `test-generator.ts` — conditional (volaný supervisorom po model approve alebo explicit request):
-  - Model: `claude-sonnet-4-6`, temperature: `0`
+- [ ] `quality-coordinator.ts` — Tier 2 coordinator, orchestruje parallel test-gen + self-heal:
+  - Model: `"sonnet"`, temperature: `0`
+  - System prompt: AGENT_PROMPTS.md §1e (`quality-coordinator`)
+  - Tools: `['Task', 'mcp__aibio__run_tests', 'mcp__aibio__test_failure_handoff']`
+  - Flow:
+    1. Parallel `Task('test-generator')` × N (one per model)
+    2. `run_tests` → ak failures → `test_failure_handoff` → `Task('sql-writer')` (self-heal, max 3 retries per model)
+    3. Re-run `run_tests` po každom self-heal attempt
+  - Retry state: drží `{ retryCount: Map<modelName, number> }` v coordinator context window
+  - Po max retries exhausted: report to supervisor so zoznamom neopravených failurov
+
+### 4.4 Atomic Agent (`modules/ainderstanding/test/agents/test-generator.ts`)
+
+- [ ] `test-generator.ts` — volaný `quality-coordinator`-om (nie supervisorom priamo):
+  - Model: `"sonnet"`, temperature: `0`
   - System prompt: AGENT_PROMPTS.md §9
   - Granted tools: `write_test_file`, `read_existing_models`, `read_profiles`, `read_docs`
   - Test selection rules (BR-TST-*):
@@ -138,12 +151,12 @@ dbt-like data quality framework. 4 generic tests (`unique`, `not_null`, `foreign
 
 ### 4.7 Failure → sql-writer handoff
 
-- [ ] Supervisor trigger condition (BR-TST-030):
+- [ ] **`quality-coordinator`** trigger condition (BR-TST-030):
   - `severity='error'` AND `self_heal_attempt < 3` (per model, nie per run)
-  - Volaný automaticky po `run_tests` v `post-processing.ts` (shell)
-- [ ] `test_failure_handoff` MCP tool → supervisor → sql-writer re-run so failure context
+  - Volaný automaticky vnútri `quality-coordinator` Swarm Loop po každom `run_tests`
+- [ ] `test_failure_handoff` MCP tool → `quality-coordinator` → `Task('sql-writer')` re-run so failure context (nie supervisor priamo)
 - [ ] Tracking: `model_runs.self_heal_attempt` counter, `parent_run_id` chain
-- [ ] Denné maximum: max 3 self-heal per model per celkový run session
+- [ ] Max 3 self-heal per model per coordinator session (BR-SHL-025 — coordinator drží retry state)
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 

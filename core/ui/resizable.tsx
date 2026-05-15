@@ -4,15 +4,24 @@ import { GripVertical } from 'lucide-react';
 import * as ResizablePrimitive from 'react-resizable-panels';
 import { cn } from './utils';
 
-const ResizablePanelGroup = ({
-  className,
-  ...props
-}: React.ComponentProps<typeof ResizablePrimitive.Group>) => (
-  <ResizablePrimitive.Group
-    className={cn('flex h-full w-full data-[panel-group-direction=vertical]:flex-col', className)}
-    {...props}
-  />
-);
+// react-resizable-panels v4 uses `direction` prop internally but the shipped type
+// definitions don't declare it, causing TS to reject it. We expose it here so
+// callers can write direction="horizontal"|"vertical" without type errors.
+type PanelGroupProps = Omit<React.ComponentProps<typeof ResizablePrimitive.Group>, 'direction'> & {
+  direction?: 'horizontal' | 'vertical';
+};
+
+const ResizablePanelGroup = ({ className, direction = 'horizontal', ...props }: PanelGroupProps) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Group = ResizablePrimitive.Group as React.ComponentType<any>;
+  return (
+    <Group
+      direction={direction}
+      className={cn('flex h-full w-full data-[panel-group-direction=vertical]:flex-col', className)}
+      {...props}
+    />
+  );
+};
 
 const ResizablePanel = ResizablePrimitive.Panel;
 

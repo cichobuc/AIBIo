@@ -24,11 +24,12 @@ Arguments (optional): $ARGUMENTS
    - Any tool handler that produces rows from an analytical query must call `awaitApproval('execute_query', ...)` before returning
    - Look for `callTool(...)` or `conn.all(...)` results that flow into `messages.push(...)` without an intervening approval call
 
-4. **Check AI mode filtering** — the supervisor must respect `activeMode`:
-   - `documentation` mode: only `interviewer`, `docs-keeper`, `schema-explorer` can be dispatched
-   - `queries` mode: only `model-architect`, `sql-writer`, `test-generator` can be dispatched
-   - `manual` mode: no agents dispatched at all
-   - Look for `Promise.allSettled(agents.map(...))` calls that don't filter by `ctx.activeMode`
+4. **Check AI mode filtering** — the supervisor must respect `activeMode` (BR-SHL-010–013):
+   - `documentation` mode: only `document-coordinator` and `explore-coordinator` (read-only) can be dispatched; `model-coordinator` and `quality-coordinator` are blocked
+   - `queries` mode: only `model-coordinator`, `quality-coordinator`, and `explore-coordinator` (read-only) can be dispatched; `document-coordinator` is blocked
+   - `manual` mode: no coordinator or atomic agent dispatched at all; chat input disabled
+   - `auto` mode: all 4 coordinators allowed
+   - Look for coordinator dispatch calls that don't check `ctx.aiMode` before invoking `Task()`
 
 5. **Check PII column exclusion** — any column listed in `table_profiles.pii_columns[]` must be:
    - Excluded from sample data returned to LLM

@@ -3,7 +3,7 @@
 > **Phase:** M1 (schema + lineage) + M2 (materialization) + M3 (AI agents)
 > **Status:** not started
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
-> **Cross-refs:** ../ARCHITECTURE.md §6.4, ../DATABASE_SCHEMA.md §6 (models, model_runs, lineage_edges), ../MCP_TOOLS.md §Model, ../API_CONTRACT.md §model §SSE-model_run_update, ../AGENT_PROMPTS.md §4–6
+> **Cross-refs:** ../ARCHITECTURE.md §6.4, ../DATABASE_SCHEMA.md §6 (models, model_runs, lineage_edges), ../MCP_TOOLS.md §Model, ../API_CONTRACT.md §model §SSE-model_run_update, ../AGENT_PROMPTS.md §6–8 (model-architect, sql-writer, transformation-suggester)
 
 ## 1. Účel
 
@@ -56,38 +56,47 @@ Srdce AInderstandingu — vytvorenie datamartu z 3-vrstvovej architektúry (stag
 
 ### 4.2 MCP tools (`modules/ainderstanding/model/lib/mcp-tools.ts`)
 
-- [ ] `read_existing_models` — vráti zoznam modelov s `{ name, layer, is_dirty, last_run_status, last_run_at, file_path }`; `allowedCallers: ['model-architect', 'sql-writer', 'supervisor']`
-- [ ] `propose_dimensional_model` — agent-to-agent tool; `model-architect` volá toto keď chce navrhnúť nové modely; vráti structured proposal `{ staging[], intermediate[], mart[] }` s popisom každého
-- [ ] `write_model_file` — gate: `awaitApproval('write_model_file', { modelName, sql })`; zapíše SQL do file-systému; uloží `models` záznam alebo updatuje; nastaví `is_dirty=false`; `allowedCallers: ['sql-writer']` (nikdy supervisor!)
-- [ ] `validate_sql` — SQL parser gate (z Connect lib) + DuckDB syntax check (EXPLAIN query); vráti `{ valid: boolean, errors: string[] }`; `allowedCallers: ['sql-writer', 'supervisor']`
-- [ ] `parse_lineage` — sparsuje všetky SQL súbory v `workspaces/{id}/models/`; extrahuje `ref()` a `source()` referencie; uloží do `lineage_edges`; volaný supervisorom po každom `write_model_file`
-- [ ] `materialize_models` — spustí full-refresh build: topological sort → pre každý model v poriadku: source pull → model execute → persist do `datamart.duckdb`; SSE `model_run_update` per model; `allowedCallers: ['supervisor']`
+- [ ] `read_existing_models` — vráti zoznam modelov; `allowedCallers: ['model-architect', 'sql-writer', 'transformation-suggester', 'test-generator']` (nie supervisor!)
+- [ ] `propose_dimensional_model` — `model-architect` volá toto; vráti structured proposal; `allowedCallers: ['model-architect']`
+- [ ] `write_model_file` — gate: `awaitApproval('write_model_file', { modelName, sql })`; zapíše SQL; `allowedCallers: ['sql-writer']` (nikdy supervisor ani coordinator priamo!)
+- [ ] `validate_sql` — SQL parser gate + DuckDB syntax check; `allowedCallers: ['sql-writer', 'model-coordinator', 'supervisor']`
+- [ ] `parse_lineage` — parsuje všetky SQL súbory; uloží do `lineage_edges`; `allowedCallers: ['model-coordinator', 'supervisor']` (model-coordinator volá po `write_model_file` PostToolUse; supervisor cross-phase)
+- [ ] `materialize_models` — full-refresh build; `allowedCallers: ['supervisor']` (cross-phase operácia)
 
-### 4.3 Subagenti (`modules/ainderstanding/model/agents/`)
+### 4.3 Phase Coordinator (`modules/ainderstanding/model/agents/model-coordinator.ts`)
 
-- [ ] `model-architect.ts` — conditional topology (volaný supervisorom pri novom workspace alebo explicit request):
-  - Model: `claude-sonnet-4-6`, temperature: `0`
+- [ ] `model-coordinator.ts` — Tier 2 coordinator, orchestruje model-architect → N×sql-writer → transformation-suggester:
+  - Model: `"sonnet"`, temperature: `0`
+  - System prompt: AGENT_PROMPTS.md §1c (`model-coordinator`)
+  - Tools: `['Task', 'mcp__aibio__validate_sql', 'mcp__aibio__parse_lineage', 'mcp__aibio__read_schema_snapshot', 'mcp__aibio__read_existing_models', 'mcp__aibio__materialize_models']`
+  - Flow: `Task('model-architect')` → parallel `Task('sql-writer')` × N (per topology layer) → `Task('transformation-suggester')` (ak user žiada hints) → self-heal loop (max 3 retries per model)
+  - PostToolUse hook (na coordinator úrovni): po každom `write_model_file` → `parse_lineage`
+  - Retry state: drží `{ retryCount: Map<modelName, number> }` v coordinator context window
+  - Po max retries exhausted: escalate to supervisor s error report, nie silent fail
+
+### 4.4 Atomic Agents (`modules/ainderstanding/model/agents/`)
+
+- [ ] `model-architect.ts` — volaný `model-coordinator`-om (nie supervisorom priamo):
+  - Model: `"sonnet"`, temperature: `0`
   - System prompt: AGENT_PROMPTS.md §4
-  - Granted tools: `read_existing_models`, `propose_dimensional_model`, `read_profiles` (z Explore), `read_docs` (z Document), `guarded_introspect_schema`
-  - Flow: načíta profily + docs → navrhne 3-vrstvovú architektúru → `propose_dimensional_model` → supervisor dostane proposal → zobrazí v UI → user schváli alebo upraví
+  - Granted tools: `read_existing_models`, `propose_dimensional_model`, `read_profiles`, `read_docs`, `read_schema_snapshot`
+  - Flow: načíta profily + docs → navrhne 3-vrstvovú architektúru → `propose_dimensional_model`
   - **Nikdy** `write_model_file` priamo
 
-- [ ] `sql-writer.ts` — parallel pattern + self-heal loop:
-  - Model: `claude-sonnet-4-6`, temperature: `0`
+- [ ] `sql-writer.ts` — volaný `model-coordinator`-om paralelne (nie supervisorom priamo):
+  - Model: `"sonnet"`, temperature: `0`
   - System prompt: AGENT_PROMPTS.md §5
-  - Granted tools: `read_existing_models`, `validate_sql`, `write_model_file` (s approval gate), `guarded_run_select_query` (pre self-heal data check), `read_profiles`, `read_docs`
-  - Parallel: N instances, jedna per model (v rámci rovnakej topological úrovne)
-  - Self-heal loop: ak `validate_sql` fail → pokúsi sa opraviť → max 3× pokusov
+  - Granted tools: `read_existing_models`, `validate_sql`, `write_model_file` (s approval gate), `guarded_run_select_query`, `read_profiles`, `read_docs`, `read_schema_snapshot`
+  - Parallel: N instances, jedna per model v rámci rovnakej topological úrovne
+  - Self-heal loop: `validate_sql` fail → opraviť → max 3× (retry state tracking v `model-coordinator`)
   - Self-heal termination: `ApprovalDeniedError` zastaví loop (BR-GOV-022)
-  - "Write portable SQL" inštrukcia v system promptu (ARCHITECTURE.md §DuckDB dialect note)
   - `parent_run_id` + `self_heal_attempt` tracking v `model_runs`
 
-- [ ] `transformation-suggester.ts` — conditional (volaný supervisorom ak user žiada o suggestions):
-  - Model: `claude-sonnet-4-6`, temperature: `0.3` (kreatívnejší pre suggestions)
+- [ ] `transformation-suggester.ts` — volaný `model-coordinator`-om alebo supervisorom (direct dispatch, BR-SHL-024b):
+  - Model: `"sonnet"`, temperature: `0.3`
   - System prompt: AGENT_PROMPTS.md §6
   - Granted tools: `read_existing_models`, `read_profiles`, `validate_sql`
-  - Output: structured suggestions `{ modelName, suggestion, rationale, sql_snippet }[]`
-  - **Nikdy** `write_model_file` — iba navrhuje, user rozhodne
+  - **Nikdy** `write_model_file` — iba navrhuje
 
 ### 4.4 Lib (`modules/ainderstanding/model/lib/`)
 

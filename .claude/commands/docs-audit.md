@@ -36,9 +36,9 @@ Critical gaps: <anything that blocks other features>
 
 **CORE.md:**
 - `AgentContext` type shape matches `core/types/agent.ts`
-- `awaitApproval()` signature matches `core/agent-sdk/approval-gate.ts`
-- SSE event union in `core/agent-sdk/streaming.ts` covers all events listed in doc
-- MCP singleton pattern in `core/agent-sdk/mcp-server.ts`
+- `awaitApproval()` signature matches `core/orchestration/approval-gate.ts`
+- SSE event union in `core/orchestration/streaming.ts` covers all events listed in doc
+- MCP singleton pattern in `core/orchestration/mcp-server.ts`
 
 **ARCHITECTURE.md:**
 - File system layout (§13) matches actual `src/` structure

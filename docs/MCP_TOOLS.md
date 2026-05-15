@@ -1,8 +1,8 @@
 # AInderstanding — MCP Tools Catalog
 
-> **Scope:** Definícia všetkých 28 MCP tools registrovaných v AInderstanding (25 MVP + 3 Translate post-MVP). Každý tool obsahuje TypeScript typy pre input/output, zoznam agentov s prístupom, requirement na approval gate, a error kódy.
+> **Scope:** Definícia všetkých 29 MCP tools registrovaných v AInderstanding (26 MVP + 3 Translate post-MVP). Každý tool obsahuje TypeScript typy pre input/output, zoznam agentov s prístupom, requirement na approval gate, a error kódy.
 >
-> **Registration:** Sub-moduly volajú `registerTool()` pri startup. Supervisor dostane iba tools kde `allowedCallers.includes('supervisor')`; sub-agenti dostanú iba tools kde `allowedCallers.includes(agentName)`.
+> **Registration:** Sub-moduly volajú `registerTool()` pri startup. `getToolsForAgent(agentName)` vracia iba tools kde `allowedCallers.includes(agentName)`. Platí pre všetky tri tiere: supervisor (Tier 1), Phase Coordinators (Tier 2), atomic agents (Tier 3). Rýchly lookup: [Tool Ownership Matrix](#tool-ownership-matrix).
 
 ---
 
@@ -10,34 +10,35 @@
 
 | Tool | Owner | Called by | Gate |
 |------|-------|-----------|------|
-| `guarded_introspect_schema` | Govern | schema-explorer | — |
-| `guarded_read_native_comments` | Govern | schema-explorer | — |
-| `guarded_sample_data` | Govern | data-profiler | — |
-| `guarded_run_select_query` | Govern | sql-writer | `execute_query` |
-| `guarded_share_results` | Govern | supervisor | `share_results_with_ai` |
-| `detect_schema_changes` | Explore | schema-explorer | — |
-| `run_profile_query` | Explore | data-profiler | — |
-| `detect_pii_candidates` | Explore | data-profiler | — |
-| `suggest_reference_table_flags` | Explore | data-profiler | — |
-| `read_schema_snapshot` | Explore | schema-explorer, data-profiler, model-architect, sql-writer, test-generator, interviewer, code-generator *(Phase 2)* | — |
-| `read_profiles` | Explore | model-architect, sql-writer, transformation-suggester, test-generator, interviewer | — |
-| `read_docs` | Document | model-architect, sql-writer, test-generator, interviewer, docs-keeper, code-generator *(Phase 2)* | — |
-| `read_existing_models` | Model | sql-writer, transformation-suggester, test-generator, code-generator *(Phase 2)* | — |
-| `propose_dimensional_model` | Model | model-architect | — |
-| `write_model_file` | Model | sql-writer | `write_model_file` |
-| `validate_sql` | Model | sql-writer, supervisor | — |
-| `parse_lineage` | Model | supervisor | — |
-| `materialize_models` | Model | supervisor | — |
-| `write_test_file` | Test | test-generator | `write_test_file` |
-| `run_tests` | Test | supervisor | — |
-| `test_failure_handoff` | Test | supervisor | — |
-| `write_doc_record` | Document | docs-keeper | `write_to_docs` (conditional) |
-| `update_doc_record` | Document | docs-keeper | `write_to_docs` (conditional) |
-| `update_coverage` | Document | docs-keeper | — |
-| `assess_readiness` | Document | interviewer, supervisor | — |
-| `generate_snippet` | Translate | code-generator | — | *(Phase 2, post-MVP)* |
-| `read_snippets` | Translate | code-generator, supervisor | — | *(Phase 2, post-MVP)* |
-| `run_snippet_test` | Translate | supervisor | — | *(Phase 2, post-MVP)* |
+| `guarded_introspect_schema` | Govern | `schema-explorer` | — |
+| `guarded_read_native_comments` | Govern | `schema-explorer` | — |
+| `guarded_sample_data` | Govern | `data-profiler` | — |
+| `guarded_run_select_query` | Govern | `sql-writer` | `execute_query` |
+| `guarded_share_results` | Govern | `supervisor` | `share_results_with_ai` |
+| `detect_schema_changes` | Explore | `schema-explorer` | — |
+| `run_profile_query` | Explore | `data-profiler` | — |
+| `detect_pii_candidates` | Explore | `data-profiler` | — |
+| `suggest_reference_table_flags` | Explore | `data-profiler` | — |
+| `read_schema_snapshot` | Explore | `explore-coordinator`, `model-coordinator`, `schema-explorer`, `data-profiler`, `model-architect`, `sql-writer`, `test-generator`, `interviewer`, `code-generator-*` *(Phase 2)* | — |
+| `read_profiles` | Explore | `model-architect`, `sql-writer`, `transformation-suggester`, `test-generator`, `interviewer` | — |
+| `read_docs` | Document | `model-architect`, `sql-writer`, `test-generator`, `interviewer`, `docs-keeper`, `code-generator-*` *(Phase 2)* | — |
+| `read_existing_models` | Model | `model-coordinator`, `model-architect`, `sql-writer`, `transformation-suggester`, `test-generator`, `quality-coordinator`, `code-generator-*` *(Phase 2)* | — |
+| `propose_dimensional_model` | Model | `model-architect` | — |
+| `write_model_file` | Model | `sql-writer` | `write_model_file` |
+| `validate_sql` | Model | `sql-writer`, `model-coordinator`, `supervisor` | — |
+| `parse_lineage` | Model | `model-coordinator`, `supervisor` | — |
+| `materialize_models` | Model | `model-coordinator`, `supervisor` | — |
+| `write_test_file` | Test | `test-generator` | `write_test_file` |
+| `run_tests` | Test | `quality-coordinator`, `supervisor` | — |
+| `test_failure_handoff` | Test | `quality-coordinator` | — |
+| `write_doc_record` | Document | `docs-keeper` | `write_to_docs` (conditional) |
+| `update_doc_record` | Document | `docs-keeper` | `write_to_docs` (conditional) |
+| `update_coverage` | Document | `document-coordinator`, `docs-keeper` | — |
+| `assess_readiness` | Document | `document-coordinator`, `interviewer`, `supervisor` | — |
+| `read_coverage_summary` | Document | `document-coordinator`, `supervisor` | — |
+| `generate_snippet` | Translate | `code-generator-*` | — | *(Phase 2, post-MVP)* |
+| `read_snippets` | Translate | `code-generator-*`, `supervisor` | — | *(Phase 2, post-MVP)* |
+| `run_snippet_test` | Translate | `supervisor` | — | *(Phase 2, post-MVP)* |
 
 **Gate legend:** `execute_query` · `share_results_with_ai` · `write_model_file` · `write_test_file` · `write_to_docs`
 
@@ -376,7 +377,7 @@ type SuggestReferenceTableFlagsOutput = {
 
 Načíta SchemaSnapshot z SQLite cache. Read-only; nevyžaduje permission check (metadata Layer 1).
 
-**Owner:** `explore/` | **Callers:** `schema-explorer` · `data-profiler` · `model-architect` · `sql-writer` · `test-generator` · `interviewer` · `code-generator` *(Phase 2)*
+**Owner:** `explore/` | **Callers:** `explore-coordinator` · `model-coordinator` · `schema-explorer` · `data-profiler` · `model-architect` · `sql-writer` · `test-generator` · `interviewer` · `code-generator-*` *(Phase 2)*
 
 ```typescript
 type ReadSchemaSnapshotInput = {
@@ -458,7 +459,7 @@ type ReadProfilesOutput = {
 
 Načíta governance dokumenty z SQLite. Dostupné všetkým read-only agentom pre kontext.
 
-**Owner:** `document/` | **Callers:** `model-architect` · `sql-writer` · `test-generator` · `interviewer` · `docs-keeper` · `code-generator` *(Phase 2)*
+**Owner:** `document/` | **Callers:** `model-architect` · `sql-writer` · `test-generator` · `interviewer` · `docs-keeper` · `code-generator-*` *(Phase 2)*
 
 ```typescript
 type ReadDocsInput = {
@@ -557,9 +558,9 @@ type UpdateDocRecordOutput = {
 
 ### `update_coverage`
 
-Prepočíta coverage skóre pre workspace. Volaný supervisorom po každom doc write batch.
+Prepočíta coverage skóre pre workspace. Volaný `docs-keeper` po každom úspešnom `write_doc_record` / `update_doc_record` (trigger z `document-coordinator` PostToolUse hook). Volaný `document-coordinator` pri ukončení swarm loop.
 
-**Owner:** `document/` | **Callers:** `docs-keeper`
+**Owner:** `document/` | **Callers:** `document-coordinator` · `docs-keeper`
 
 ```typescript
 type UpdateCoverageInput = {
@@ -583,9 +584,9 @@ type UpdateCoverageOutput = {
 
 ### `assess_readiness`
 
-Vráti export readiness hodnotenie. Supervisor používa pre rozhodnutie, či navrhnúť export alebo pokračovať v dokumentácii.
+Vráti export readiness hodnotenie. `document-coordinator` ho volá na konci každého Swarm Loop kola na rozhodnutie o pokračovaní alebo ukončení. `supervisor` a `interviewer` ho používajú na high-level readiness check.
 
-**Owner:** `document/` | **Callers:** `interviewer` · `supervisor`
+**Owner:** `document/` | **Callers:** `document-coordinator` · `interviewer` · `supervisor`
 
 ```typescript
 type AssessReadinessInput = {
@@ -610,6 +611,33 @@ type AssessReadinessOutput = {
 
 ---
 
+### `read_coverage_summary`
+
+Načíta aktuálne coverage skóre bez prepočtu. Read-only; používaný supervisorom a `document-coordinator` na reporting a rozhodovanie.
+
+**Owner:** `document/` | **Callers:** `document-coordinator` · `supervisor`
+
+```typescript
+type ReadCoverageSummaryInput = {
+  workspace_id: string;
+};
+
+type ReadCoverageSummaryOutput = {
+  coverage_pct: number;               // 0.0 – 100.0
+  by_type: {
+    tables: number;
+    columns: number;
+    business_terms: number;
+    relationships: number;
+  };
+  computed_at: string;                // ISO 8601 — čas posledného update_coverage
+};
+```
+
+**Errors:** `RESOURCE_NOT_FOUND`
+
+---
+
 ## Model Tools
 
 ---
@@ -618,7 +646,7 @@ type AssessReadinessOutput = {
 
 Načíta zoznam existujúcich modelov vrátane ich SQL. Používané pre kontext pri generovaní nových modelov.
 
-**Owner:** `model/` | **Callers:** `sql-writer` · `transformation-suggester` · `test-generator` · `code-generator` *(Phase 2)*
+**Owner:** `model/` | **Callers:** `model-coordinator` · `model-architect` · `sql-writer` · `transformation-suggester` · `test-generator` · `quality-coordinator` · `code-generator-*` *(Phase 2)*
 
 ```typescript
 type ReadExistingModelsInput = {
@@ -725,7 +753,7 @@ Tool-špecifický error:
 
 Preflight syntax check + parser gate bez spustenia. Synchronný, nevyžaduje approval.
 
-**Owner:** `model/` | **Callers:** `sql-writer` · `supervisor`
+**Owner:** `model/` | **Callers:** `sql-writer` · `model-coordinator` · `supervisor`
 
 ```typescript
 type ValidateSqlInput = {
@@ -755,7 +783,9 @@ type ValidateSqlOutput = {
 
 Reparsuje všetky model SQL súbory, extrahuje `ref()` a `source()` referencie, a uloží hrany do `lineage_edges`.
 
-**Owner:** `model/` | **Caller:** `supervisor`
+**Owner:** `model/` | **Callers:** `model-coordinator` · `supervisor`
+
+`model-coordinator` volá `parse_lineage` ako PostToolUse hook po každom `write_model_file` (rebuild lineage pre aktuálnu fázu). Supervisor volá ho po cross-phase materializácii.
 
 ```typescript
 type ParseLineageInput = {
@@ -790,7 +820,7 @@ Tool-špecifický error:
 
 Spustí 2-phase materializáciu (source pull → model execution v topologickom poradí). Emituje `model_run_update` SSE eventy priebežne.
 
-**Owner:** `model/` | **Caller:** `supervisor`
+**Owner:** `model/` | **Callers:** `model-coordinator` · `supervisor`
 
 ```typescript
 type MaterializeModelsInput = {
@@ -859,7 +889,9 @@ type WriteTestFileOutput = {
 
 Spustí test runner. Emituje `test_run_update` SSE eventy pre každý test výsledok.
 
-**Owner:** `test/` | **Caller:** `supervisor`
+**Owner:** `test/` | **Callers:** `quality-coordinator` · `supervisor`
+
+`quality-coordinator` volá po každom `test-generator` write (inline test-run + self-heal loop). Supervisor volá pri cross-phase `materialize_models` → auto-run.
 
 ```typescript
 type RunTestsInput = {
@@ -883,7 +915,9 @@ type RunTestsOutput = {
 
 Predá kontext o zlyhaní modelu (SQL chyba pri materializácii alebo test failure) agentovi `sql-writer` pre self-heal loop. Max 3 retry per model.
 
-**Owner:** `test/` | **Caller:** `supervisor`
+**Owner:** `test/` | **Caller:** `quality-coordinator`
+
+`quality-coordinator` je výhradný caller — self-heal je intra-phase operácia vlastnená koordinátorom. Supervisor nevolá tento tool priamo (BR-SHL-001/002).
 
 ```typescript
 type TestFailureHandoffInput = {
@@ -920,7 +954,7 @@ Generuje kód pre model v cieľovom jazyku cez `code-generator` agent a uloží 
 
 **Owner:** `translate/` | **Caller:** `code-generator` | **Gate:** none
 
-`code-generator` volá tento tool po vygenerovaní kódu, aby persistoval výsledok. Supervisor *nevolá* `generate_snippet` priamo — supervisor invokuje `code-generator` subagenta (cez `invoke_subagent`), ktorý následne volá tento tool.
+`code-generator-syntax` / `code-generator-semantic` volajú tento tool po vygenerovaní kódu, aby persistovali výsledok. Supervisor *nevolá* `generate_snippet` priamo — deleguje na `code-generator-*` atomic agenta cez built-in `Task` tool, ktorý následne volá `generate_snippet`.
 
 ```typescript
 type GenerateSnippetInput = {
@@ -950,7 +984,7 @@ type GenerateSnippetOutput = {
 
 Číta existujúce snippety pre model (alebo všetky modely v workspace).
 
-**Owner:** `translate/` | **Callers:** `code-generator`, `supervisor` | **Gate:** none
+**Owner:** `translate/` | **Callers:** `code-generator-*` · `supervisor` | **Gate:** none
 
 ```typescript
 type ReadSnippetsInput = {
@@ -1025,7 +1059,7 @@ Sub-moduly registrujú tools v `{module}/lib/mcp-tools.ts` pri inicializácii:
 
 ```typescript
 // Príklad: govern/lib/mcp-tools.ts
-import { registerTool } from '@/core/agent-sdk/tool-registry';
+import { registerTool } from '@/core/orchestration/tool-registry';
 
 registerTool({
   name: 'guarded_introspect_schema',
@@ -1043,4 +1077,39 @@ registerTool({
 });
 ```
 
-`core/agent-sdk/tool-registry.ts` exportuje `getToolsForAgent(agentName)` — vracia len tools kde `allowedCallers.includes(agentName)`.
+`core/orchestration/tool-registry.ts` exportuje `getToolsForAgent(agentName)` — vracia len tools kde `allowedCallers.includes(agentName)`.
+
+---
+
+## Tool Ownership Matrix
+
+Rýchly lookup kto môže volať čo. Write tools majú výhradne jedného atomic agent callera — žiaden coordinator ani supervisor ich nevolá priamo (CR-MCP-003).
+
+| Tool | supervisor | explore-coord. | model-coord. | doc-coord. | quality-coord. | Atomic agent(s) |
+|------|:---:|:---:|:---:|:---:|:---:|---|
+| `guarded_introspect_schema` | — | — | — | — | — | `schema-explorer` |
+| `guarded_read_native_comments` | — | — | — | — | — | `schema-explorer` |
+| `guarded_sample_data` | — | — | — | — | — | `data-profiler` |
+| `guarded_run_select_query` | — | — | — | — | — | `sql-writer` |
+| `guarded_share_results` | ✓ | — | — | — | — | — |
+| `detect_schema_changes` | — | — | — | — | — | `schema-explorer` |
+| `run_profile_query` | — | — | — | — | — | `data-profiler` |
+| `detect_pii_candidates` | — | — | — | — | — | `data-profiler` |
+| `suggest_reference_table_flags` | — | — | — | — | — | `data-profiler` |
+| `read_schema_snapshot` | — | ✓ | ✓ | — | — | `schema-explorer`, `data-profiler`, `model-architect`, `sql-writer`, `test-generator`, `interviewer` |
+| `read_profiles` | — | — | — | — | — | `model-architect`, `sql-writer`, `transformation-suggester`, `test-generator`, `interviewer` |
+| `read_docs` | — | — | — | — | — | `model-architect`, `sql-writer`, `test-generator`, `interviewer`, `docs-keeper` |
+| `read_existing_models` | — | — | ✓ | — | ✓ | `model-architect`, `sql-writer`, `transformation-suggester`, `test-generator` |
+| `propose_dimensional_model` | — | — | — | — | — | `model-architect` |
+| `write_model_file` | — | — | — | — | — | `sql-writer` (**write**) |
+| `validate_sql` | ✓ | — | ✓ | — | — | `sql-writer` |
+| `parse_lineage` | ✓ | — | ✓ | — | — | — |
+| `materialize_models` | ✓ | — | ✓ | — | — | — |
+| `write_test_file` | — | — | — | — | — | `test-generator` (**write**) |
+| `run_tests` | ✓ | — | — | — | ✓ | — |
+| `test_failure_handoff` | — | — | — | — | ✓ | — |
+| `write_doc_record` | — | — | — | — | — | `docs-keeper` (**write**) |
+| `update_doc_record` | — | — | — | — | — | `docs-keeper` (**write**) |
+| `update_coverage` | — | — | — | ✓ | — | `docs-keeper` |
+| `assess_readiness` | ✓ | — | — | ✓ | — | `interviewer` |
+| `read_coverage_summary` | ✓ | — | — | ✓ | — | — |

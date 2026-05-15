@@ -1,3 +1,5 @@
+**Deprecated** — use `/new-agent` instead. This command uses old flat-agent patterns; `/new-agent` supports the Two-Tier architecture (Tier 2 coordinator vs Tier 3 atomic).
+
 Scaffold a new AIBIo subagent with correct boilerplate.
 
 Arguments: $ARGUMENTS
@@ -8,10 +10,10 @@ Arguments: $ARGUMENTS
 Each subagent lives in `src/modules/ainderstanding/<module>/agents/<agent-name>.ts` or `src/core/agents/<agent-name>.ts` for cross-module agents.
 
 Subagents:
-- Use `@anthropic-ai/sdk` directly (no LangChain)
-- Receive an `AgentContext` via `AsyncLocalStorage` (from `core/agent-sdk/context.ts`)
-- Call MCP tools via `callTool(name, args, ctx)` from `core/agent-sdk/mcp-server.ts`
-- Emit SSE events via `sseEmitter.emit(workspaceId, event)` from `core/agent-sdk/streaming.ts`
+- Use `@anthropic-ai/claude-agent-sdk` directly (no LangChain)
+- Receive an `AgentContext` via `AsyncLocalStorage` (from `core/orchestration/context.ts`)
+- Call MCP tools via `callTool(name, args, ctx)` from `core/orchestration/mcp-server.ts`
+- Emit SSE events via `sseEmitter.emit(workspaceId, event)` from `core/orchestration/streaming.ts`
 - Handle `tool_use` stop reason in a loop (standard Anthropic tool-use pattern)
 - Include `cache_control: { type: "ephemeral" }` on system prompt for prompt caching
 
@@ -23,85 +25,59 @@ Subagents:
 
 3. **Create the agent file** with this structure:
    ```typescript
-   import Anthropic from '@anthropic-ai/sdk';
-   import type { MessageParam } from '@anthropic-ai/sdk/resources/messages.js';
-   import { getAgentContext } from '@/core/agent-sdk/context.js';
-   import { sseEmitter } from '@/core/agent-sdk/streaming.js';
-   import { callTool, getToolsForAgent } from '@/core/agent-sdk/mcp-server.js';
+   import { query } from '@anthropic-ai/claude-agent-sdk';
+   import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+   import { getAgentContext } from '@/core/orchestration/context.js';
+   import { sseEmitter } from '@/core/orchestration/streaming.js';
+   import { getToolsForAgent } from '@/core/orchestration/mcp-server.js';
    // ... relevant tool imports
 
-   const client = new Anthropic();
    const MODEL = 'claude-haiku-4-5-20251001'; // or claude-sonnet-4-6
 
    export async function run<AgentName>(input: <InputType>): Promise<<OutputType>> {
      const ctx = getAgentContext();
-     
+
      sseEmitter.emit(ctx.workspaceId, {
        type: 'agent_thinking',
        agentName: '<agent-name>',
      });
 
-     const messages: MessageParam[] = [
-       { role: 'user', content: /* build from input */ }
-     ];
+     let finalText = '';
 
-     while (true) {
-       const response = await client.messages.create({
-         model: MODEL,
-         max_tokens: 4096,
-         system: [{
-           type: 'text',
-           text: SYSTEM_PROMPT,
-           cache_control: { type: 'ephemeral' },
-         }],
-         tools: getToolsForAgent('<agent-name>'),
-         messages,
-       });
-
-       if (response.stop_reason === 'end_turn') {
-         const text = response.content
-           .filter(b => b.type === 'text')
-           .map(b => b.text)
-           .join('');
+     for await (const message of query({
+       model: MODEL,
+       system: [{
+         type: 'text',
+         text: SYSTEM_PROMPT,
+         cache_control: { type: 'ephemeral' },
+       }],
+       tools: getToolsForAgent('<agent-name>'),
+       messages: [{ role: 'user', content: /* build from input */ }],
+     })) {
+       if (message.type === 'text') {
+         finalText += message.text;
          sseEmitter.emit(ctx.workspaceId, {
            type: 'agent_message',
            agentName: '<agent-name>',
-           text,
+           text: message.text,
          });
-         return /* parse text into OutputType */;
+       } else if (message.type === 'tool_use') {
+         sseEmitter.emit(ctx.workspaceId, {
+           type: 'tool_call',
+           agentName: '<agent-name>',
+           toolName: message.name,
+         });
+       } else if (message.type === 'tool_result') {
+         sseEmitter.emit(ctx.workspaceId, {
+           type: 'tool_result',
+           toolName: message.toolName,
+           summary: String(message.content).slice(0, 100),
+           success: true,
+         });
        }
-
-       if (response.stop_reason === 'tool_use') {
-         const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-         const toolResults = await Promise.all(
-           toolUseBlocks.map(async (block) => {
-             sseEmitter.emit(ctx.workspaceId, {
-               type: 'tool_call',
-               agentName: '<agent-name>',
-               toolName: block.name,
-             });
-             const result = await callTool(block.name, block.input as Record<string, unknown>, ctx);
-             sseEmitter.emit(ctx.workspaceId, {
-               type: 'tool_result',
-               toolName: block.name,
-               summary: String(result).slice(0, 100),
-               success: true,
-             });
-             return {
-               type: 'tool_result' as const,
-               tool_use_id: block.id,
-               content: JSON.stringify(result),
-             };
-           })
-         );
-
-         messages.push({ role: 'assistant', content: response.content });
-         messages.push({ role: 'user', content: toolResults });
-         continue;
-       }
-
-       throw new Error(`Unexpected stop_reason: ${response.stop_reason}`);
      }
+
+     return /* parse finalText into OutputType */;
    }
    ```
 
@@ -111,7 +87,7 @@ Subagents:
    - What format to return results in
    - GDPR constraints if it touches data (Tier 1/2/3 rules)
 
-5. **Register tools** — if this agent needs new MCP tools, scaffold them in the appropriate module's `tools/` directory following the `ToolDefinition` pattern from `core/agent-sdk/tool-registry.ts`.
+5. **Register tools** — if this agent needs new MCP tools, scaffold them in the appropriate module's `tools/` directory following the `ToolDefinition` pattern from `core/orchestration/tool-registry.ts`.
 
 6. **Update agent type** — add the new agent name to `SubagentName` union in `core/types/agent.ts`.
 

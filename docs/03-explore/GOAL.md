@@ -69,7 +69,7 @@ Explore **rešpektuje permission tiers z Govern** — defaultne ťahá iba schem
 1. Call `introspect_schema` → tabuľky, columns, types, FK
 2. Call `read_native_comments` → DBA-authored comments z DB metadata
 3. Compare s previous snapshot (if any) → emit `schema_changes` entries
-4. Vracia structured summary supervisor agentovi
+4. Vracia structured summary `explore-coordinator`-u (ktorý riadi ďalší krok — spustenie `data-profiler`)
 
 ### `data-profiler`
 
