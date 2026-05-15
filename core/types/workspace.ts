@@ -1,32 +1,100 @@
 export type WorkspaceId = string;
 export type DataSourceId = string;
 
-export type DbDriver = 'postgres' | 'mssql' | 'mysql' | 'duckdb';
+export type AIMode = 'auto' | 'documentation' | 'queries' | 'manual';
 
-export type ConnectionConfig = {
-  driver: DbDriver;
-  host?: string;
-  port?: number;
+export type DbDriver = 'postgres' | 'mssql' | 'mysql' | 'duckdb';
+export type ConnectionMode = 'form' | 'connection_string';
+export type DataSourceStatus = 'active' | 'error' | 'pending';
+export type SslMode = 'disable' | 'allow' | 'prefer' | 'require';
+export type FormCredentials = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
   database: string;
-  username?: string;
-  password?: string;
   ssl?: boolean;
-  filePath?: string;
 };
 
-export type Workspace = {
-  id: WorkspaceId;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
+export type ConnectionStringCredentials = {
+  connection_string: string;
+};
+
+export type ConnectionCredentials = FormCredentials | ConnectionStringCredentials;
+
+export type ConnectionSettings = {
+  ssl_mode?: SslMode;
+  query_timeout_sec?: number | null;
+  max_connections?: number;
 };
 
 export type DataSource = {
   id: DataSourceId;
   workspaceId: WorkspaceId;
   name: string;
-  driver: DbDriver;
-  connectionConfig: ConnectionConfig;
-  createdAt: Date;
-  updatedAt: Date;
+  dbType: DbDriver;
+  connectionMode: ConnectionMode;
+  connectionSettingsJson: ConnectionSettings | null;
+  status: DataSourceStatus;
+  lastTestedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Workspace = {
+  id: WorkspaceId;
+  name: string;
+  description: string | null;
+  aiMode: AIMode;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SchemaColumn = {
+  name: string;
+  dataType: string;
+  nullable: boolean;
+  isPrimaryKey: boolean;
+  isForeignKey: boolean;
+  comment?: string;
+};
+
+export type SchemaTable = {
+  name: string;
+  schema?: string;
+  columns: SchemaColumn[];
+  comment?: string;
+};
+
+export type SchemaSnapshot = {
+  tables: SchemaTable[];
+  capturedAt: string;
+};
+
+export type NativeComment = {
+  objectType: 'table' | 'column';
+  tableName: string;
+  columnName?: string;
+  comment: string;
+};
+
+export type ConnectionTestResult = {
+  success: boolean;
+  latencyMs?: number;
+  step: string;
+  error?: string;
+  detail?: string;
+};
+
+export type QueryResult = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+};
+
+export type SqlRejectedError = {
+  code: 'SQL_REJECTED';
+  reason: string;
+  statement_type: string;
 };

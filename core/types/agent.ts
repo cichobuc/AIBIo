@@ -21,7 +21,8 @@ export type SubagentName = AtomicAgentName;
 
 export type ActorName = AtomicAgentName | CoordinatorName | 'supervisor';
 
-export type AIMode = 'auto' | 'documentation' | 'queries' | 'manual';
+import type { AIMode } from './workspace';
+export type { AIMode };
 
 export type TokenCounter = {
   input: number;

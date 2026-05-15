@@ -1,7 +1,7 @@
 # TODO — Shell (Supervisor + Workspace UI)
 
 > **Phase:** P0c–P0d
-> **Status:** in_progress (P0c — UI Foundation + Claude design tools)
+> **Status:** done (P0c + P0d — UI Foundation + Supervisor Orchestration complete)
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §5.3 §7 §15, ../DATABASE_SCHEMA.md §4 (workspace_settings), ../MCP_TOOLS.md (supervisor tool whitelist), ../API_CONTRACT.md §POST-chat §GET-messages, ../AGENT_PROMPTS.md §1 (supervisor system prompt)
 
@@ -39,7 +39,7 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 
 ### 4.1 DB schema (`modules/ainderstanding/shell/db/schema.ts`)
 
-- [ ] Tabuľka `workspace_settings` (20 stĺpcov podľa DATABASE_SCHEMA.md §4) — 1:1 per workspace, vzniká s defaultmi pri create workspace:
+- [x] Tabuľka `workspace_settings` (20 stĺpcov podľa DATABASE_SCHEMA.md §4) — 1:1 per workspace, vzniká s defaultmi pri create workspace:
   - `id` UUID PK, `workspace_id` FK `workspaces.id` CASCADE UNIQUE
   - `query_timeout_sec` default `30`
   - `auto_profile_on_source_add` boolean default `true`
@@ -63,12 +63,12 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 
 ### 4.2 API endpointy
 
-- [ ] `app/api/chat/[workspaceId]/route.ts` — POST:
+- [x] `app/api/chat/[workspaceId]/route.ts` — POST:
   - Validácia: max 4000 znakov (BR-SHL-005), Manual mode → 400, aktívna session conflict → 409
   - Persist message do `chat_messages` (stub insert kým 06-document nie je hotový)
   - Vygenerovať `sessionId` UUID, dispatch supervisor
   - Vrátiť `{ sessionId, status: 'dispatched', messageId }`
-- [ ] `app/api/chat/[workspaceId]/messages/route.ts` — GET:
+- [x] `app/api/chat/[workspaceId]/messages/route.ts` — GET:
   - Cursor-based paginácia (`?before=<messageId>&limit=50`)
   - Vrátiť pole `{ id, role, content, agentName?, timestamp }`
 
@@ -97,76 +97,76 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 
 - [x] `useSSEStream.ts` — `EventSource` wrapper s exponential backoff (1/2/4/8/16s max 5×), stale detection >30s, dispatch do Zustand store
 - [x] `useKeyboardShortcuts.ts` — ⌘B (sidebar), ⌘⇧A (chat), ⌘J (bottom), ⌘1-7 (navigate)
-- [ ] `useWorkspaceContext.ts` — nahradený Zustand store v `shell/store/workspace-store.ts`; pre-TypeScript typing wrapper ak bude potrebný
+- [x] `useWorkspaceContext.ts` — nahradený Zustand store v `shell/store/workspace-store.ts`; pre-TypeScript typing wrapper ak bude potrebný
 
 ### 4.6 Lib (`modules/ainderstanding/shell/lib/`)
 
-- [ ] `intent-classifier.ts` — sync rule-based (nie LLM):
+- [x] `intent-classifier.ts` — sync rule-based (nie LLM):
   - Input: `{ message, activeModule, aiMode, workspaceState }`
   - Output: `DispatchPlan { mode: 'manual_only' | 'direct_agent' | 'coordinator' | 'multi_phase', target?: string, steps?: AgentStep[] }`
   - Pravidlá: BR-SHL-020 (mode filtering), BR-SHL-021 (active module boost), BR-SHL-024 (coordinator bypass podmienky)
   - `coordinator` mode → `target` je meno koordinátora (napr. `'explore-coordinator'`)
   - `multi_phase` mode → LLM fallback, supervisor rozhodne o sekvencii coordinatorov/agentov
   - Manual mode → `{ mode: 'manual_only', steps: [] }`
-- [ ] `session-manager.ts`:
+- [x] `session-manager.ts`:
   - `createSession(workspaceId): Session` — UUID, timestamp, initial state
   - `getActiveSession(workspaceId): Session | null`
   - `endSession(sessionId): void`
   - In-memory Map, cleanup pri `stream_end`
   - BR-SHL-033: max 1 aktívna session per workspace
-- [ ] `supervisor-state.ts` — state machine:
+- [x] `supervisor-state.ts` — state machine:
   - States: `IDLE → CLASSIFYING → DISPATCHING → WAITING_APPROVAL → STREAMING → COMPLETING → IDLE`
   - Max 20 turns hard cap (BR-SHL-003) — after 20 turns force `COMPLETING`
   - Persist state per sessionId in-memory
-- [ ] `dispatcher.ts`:
+- [x] `dispatcher.ts`:
   - `invokeCoordinator(name, context): Promise<CoordinatorResult>` — pre `coordinator` mode
   - `invokeAgent(name, tools, context): Promise<AgentResult>` — pre `direct_agent` mode
   - Parallel dispatch: `Promise.all()` pre `parallelGroup` steps (ak v `multi_phase`)
   - Serialized approval: čaká na resolve pred ďalším krokom — BR-SHL-023
-- [ ] `post-processing.ts` — supervisor-owned cross-phase PostToolUse hooks (BR-SHL-045b):
+- [x] `post-processing.ts` — supervisor-owned cross-phase PostToolUse hooks (BR-SHL-045b):
   - Po `materialize_models` → volá `run_tests` (ak `auto_run_tests = true`)
   - **Nie** `parse_lineage` po `sql-writer` — to je `model-coordinator` PostToolUse hook
   - **Nie** `update_coverage` po `docs-keeper` — to je `document-coordinator` PostToolUse hook
 
 ### 4.7 Supervisor agent (`modules/ainderstanding/shell/orchestrator.ts`)
 
-- [ ] Factory function `createSupervisor(context: AgentContext)` — vracia `Supervisor` instance
-- [ ] `@anthropic-ai/claude-agent-sdk` `query()` s async iterátorom; `agents` mapa obsahuje **4 coordinators + 8 atomic agents** (Tier 2 + Tier 3) — viď AGENT_PROMPTS.md §§1a-1e
-- [ ] Model: `"sonnet"` (alias), temperature: `0`, max_tokens: `4096`
-- [ ] System prompt — z AGENT_PROMPTS.md §1a (supervisor); inject: `workspaceId`, `activeModule`, `aiMode`, `sourcesSummary`, `modelCount`, `docCoveragePct`
-- [ ] **Registrácia coordinatorov v `supervisorAgents`** (CR-MCP-004):
-  - `'explore-coordinator'`: `exploreCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__read_schema_snapshot']`, model: `haiku`)
-  - `'model-coordinator'`: `modelCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__validate_sql', 'mcp__aibio__parse_lineage', 'mcp__aibio__read_schema_snapshot', 'mcp__aibio__read_existing_models', 'mcp__aibio__materialize_models']`, model: `sonnet`)
-  - `'document-coordinator'`: `documentCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__assess_readiness', 'mcp__aibio__update_coverage', 'mcp__aibio__read_coverage_summary']`, model: `sonnet`)
-  - `'quality-coordinator'`: `qualityCoordinatorDefinition` (tools: `['Task', 'mcp__aibio__run_tests', 'mcp__aibio__test_failure_handoff', 'mcp__aibio__read_existing_models']`, model: `sonnet`)
-- [ ] Granted supervisor tools (read-only + cross-phase orchestration) — MCP_TOOLS.md Tool Ownership Matrix:
-  - `Task` (built-in SDK tool — deleguje na coordinatorov/agentov z `agents` mapy)
+- [x] Factory function `createSupervisor(context: AgentContext)` — vracia `Supervisor` instance
+- [x] `@anthropic-ai/claude-agent-sdk` `query()` s async iterátorom; `agents` mapa obsahuje **4 coordinators + 8 atomic agents** (Tier 2 + Tier 3) — viď AGENT_PROMPTS.md §§1a-1e
+- [x] Model: `"sonnet"` (alias), temperature: `0`, max_tokens: `4096`
+- [x] System prompt — z AGENT_PROMPTS.md §1a (supervisor); inject: `workspaceId`, `activeModule`, `aiMode`, `sourcesSummary`, `modelCount`, `docCoveragePct`
+- [x] **Registrácia coordinatorov v `supervisorAgents`** (CR-MCP-004):
+  - `'explore-coordinator'`: `exploreCoordinatorDefinition` (tools: `['Agent', 'mcp__aibio__read_schema_snapshot']`, model: `haiku`)
+  - `'model-coordinator'`: `modelCoordinatorDefinition` (tools: `['Agent', 'mcp__aibio__validate_sql', 'mcp__aibio__parse_lineage', 'mcp__aibio__read_schema_snapshot', 'mcp__aibio__read_existing_models', 'mcp__aibio__materialize_models']`, model: `sonnet`)
+  - `'document-coordinator'`: `documentCoordinatorDefinition` (tools: `['Agent', 'mcp__aibio__assess_readiness', 'mcp__aibio__update_coverage', 'mcp__aibio__read_coverage_summary']`, model: `sonnet`)
+  - `'quality-coordinator'`: `qualityCoordinatorDefinition` (tools: `['Agent', 'mcp__aibio__run_tests', 'mcp__aibio__test_failure_handoff', 'mcp__aibio__read_existing_models']`, model: `sonnet`)
+- [x] Granted supervisor tools (read-only + cross-phase orchestration) — MCP_TOOLS.md Tool Ownership Matrix:
+  - `Agent` (built-in SDK tool — deleguje na coordinatorov/agentov z `agents` mapy)
   - `mcp__aibio__validate_sql`, `mcp__aibio__parse_lineage`, `mcp__aibio__materialize_models`
   - `mcp__aibio__run_tests`, `mcp__aibio__assess_readiness`
   - `mcp__aibio__read_coverage_summary`, `mcp__aibio__guarded_share_results`
-- [ ] **Vynechané** (write tools): `write_model_file`, `write_test_file`, `write_doc_record`, `update_doc_record` (BR-SHL-001)
-- [ ] **Vynechané** (coordinator-owned tools): `update_coverage`, `test_failure_handoff` — nie sú v supervisor allowedTools (BR-SHL-002)
-- [ ] `canUseTool: approvalGateCanUseTool` — z `core/orchestration/approval-gate.ts`; predaný do `query()` options pre consent enforcement na gated tools
-- [ ] `hooks: supervisorHooks` — z `core/orchestration/hooks.ts`; registruje `PostToolUse` pre deterministický post-processing
-- [ ] Streaming response → SSE emit každého chunk cez `sseEmitter.emit(workspaceId, event)`
+- [x] **Vynechané** (write tools): `write_model_file`, `write_test_file`, `write_doc_record`, `update_doc_record` (BR-SHL-001)
+- [x] **Vynechané** (coordinator-owned tools): `update_coverage`, `test_failure_handoff` — nie sú v supervisor allowedTools (BR-SHL-002)
+- [x] `canUseTool: approvalGateCanUseTool` — z `core/orchestration/approval-gate.ts`; predaný do `query()` options pre consent enforcement na gated tools
+- [x] `hooks: supervisorHooks` — z `core/orchestration/hooks.ts`; registruje `PostToolUse` pre deterministický post-processing
+- [x] Streaming response → SSE emit každého chunk cez `sseEmitter.emit(workspaceId, event)`
 
 ### 4.8 Hooks (`core/orchestration/hooks.ts`)
 
-- [ ] Vytvoriť `core/orchestration/hooks.ts` s exportom `supervisorHooks: SdkHooks`
-- [ ] `PostToolUse` matcher `mcp__aibio__write_model_file` → volá `parse_lineage` (**nie** `update_coverage` — to je `document-coordinator` hook, nie supervisor)
-- [ ] `PostToolUse` matcher `mcp__aibio__materialize_models` → volá `run_tests` (ak `auto_run_tests = true`)
-- [ ] Predať `hooks: supervisorHooks` do `query()` v `orchestrator.ts`
-- [ ] Consent enforcement (pre-tool blocking) riešiť cez `canUseTool` callback — **nie** `PreToolUse` hook
-- [ ] **Poznámka:** `model-coordinator` a `document-coordinator` majú vlastné `SdkHooks` (coordinator-level PostToolUse) — definované v ich `AgentDefinition` alebo coordinator orchestrator súboroch, nie tu
+- [x] Vytvoriť `core/orchestration/hooks.ts` s exportom `supervisorHooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>`
+- [x] `PostToolUse` matcher `mcp__aibio__write_model_file` → volá `parse_lineage` (**nie** `update_coverage` — to je `document-coordinator` hook, nie supervisor)
+- [x] `PostToolUse` matcher `mcp__aibio__materialize_models` → volá `run_tests` (ak `auto_run_tests = true`)
+- [x] Predať `hooks: supervisorHooks` do `query()` v `orchestrator.ts`
+- [x] Consent enforcement (pre-tool blocking) riešiť cez `canUseTool` callback — **nie** `PreToolUse` hook
+- [x] **Poznámka:** `model-coordinator` a `document-coordinator` majú vlastné `SdkHooks` (coordinator-level PostToolUse) — definované v ich `AgentDefinition` alebo coordinator orchestrator súboroch, nie tu
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 
-- [ ] BR-SHL-001: supervisor nikdy nepoužíva write tools priamo
-- [ ] BR-SHL-003: max 20 turns per session — hard cap v supervisor state machine
-- [ ] BR-SHL-005: max 4000 znakov na user message — validácia pred persist
-- [ ] BR-SHL-010: ChatInput disabled v Manual mode
+- [x] BR-SHL-001: supervisor nikdy nepoužíva write tools priamo
+- [x] BR-SHL-003: max 20 turns per session — hard cap v supervisor state machine
+- [x] BR-SHL-005: max 4000 znakov na user message — validácia pred persist
+- [x] BR-SHL-010: ChatInput disabled v Manual mode
 - [ ] BR-SHL-023: approval gates serializované pri parallel dispatch — nesmú bežať concurrent
-- [ ] BR-SHL-033: max 1 aktívna session per workspace
+- [x] BR-SHL-033: max 1 aktívna session per workspace
 - [ ] BR-SHL-047: ChatInput disabled počas aktívneho approval gate
 
 ## 6. Verifikácia (end-to-end)

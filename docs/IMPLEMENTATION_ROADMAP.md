@@ -7,7 +7,7 @@ Implementačný poriadok a stav všetkých modulov. Číslo = implementačné po
 | # | Module     | Phase     | Status      | Est.  | TODO                                          |
 |---|------------|-----------|-------------|-------|-----------------------------------------------|
 | 0 | core       | P0a–P0b   | done        | ~8h   | [docs/00-core/TODO.md](./00-core/TODO.md)     |
-| 1 | shell      | P0c–P0d   | in progress | ~8h   | [docs/01-shell/TODO.md](./01-shell/TODO.md)   |
+| 1 | shell      | P0c–P0d   | done        | ~8h   | [docs/01-shell/TODO.md](./01-shell/TODO.md)   |
 | 2 | connect    | C1        | done        | ~3d   | [docs/02-connect/TODO.md](./02-connect/TODO.md) |
 | 3 | explore    | E1–E2     | not started | ~4d   | [docs/03-explore/TODO.md](./03-explore/TODO.md) |
 | 4 | govern     | G1–G2     | not started | ~4d   | [docs/04-govern/TODO.md](./04-govern/TODO.md) |

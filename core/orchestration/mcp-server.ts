@@ -90,6 +90,11 @@ function getMcpInstance(): Promise<McpInstance> {
   return global.__aibio_mcp;
 }
 
+export async function getMcpServer(): Promise<Server> {
+  const { server } = await getMcpInstance();
+  return server;
+}
+
 export async function callTool<TOutput = unknown>(
   name: string,
   args: Record<string, unknown>,

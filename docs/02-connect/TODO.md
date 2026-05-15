@@ -1,7 +1,7 @@
 # TODO — Connect (Source Connection Management)
 
 > **Phase:** C1 (MVP) + C2 (additional adapters)
-> **Status:** done (C1)
+> **Status:** done (C1 — implemented 2026-05-16)
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §6.1, ../DATABASE_SCHEMA.md §2 (workspaces, data_sources), ../MCP_TOOLS.md (žiadne vlastné — Govern wrappuje adaptéry), ../API_CONTRACT.md §workspace-CRUD
 
@@ -31,25 +31,20 @@ Foundation layer pre AInderstanding — manažuje pripojenia na zdrojové DB s *
 
 ## 4. Implementačný checklist
 
-### 4.1 DB schema (`modules/ainderstanding/connect/db/schema.ts`)
+### 4.1 DB schema (`core/db/schema/data-source.ts`)
 
-- [ ] Tabuľka `workspaces` (z DATABASE_SCHEMA.md §2):
-  - `id` UUID PK, `name` varchar(100) NOT NULL
-  - `description` text nullable
-  - `ai_mode` enum(`auto`, `documentation`, `queries`, `manual`) default `auto`
-  - `is_archived` boolean default `false`
-  - `created_at`, `updated_at`
-- [ ] Tabuľka `data_sources` (z DATABASE_SCHEMA.md §2):
+- [x] Tabuľka `workspaces` — v `core/db/schema/workspace.ts` (P0a)
+- [x] Tabuľka `data_sources` (z DATABASE_SCHEMA.md §2):
   - `id` UUID PK, `workspace_id` FK `workspaces.id` CASCADE
   - `name` varchar(100) NOT NULL
   - `db_type` enum(`postgres`, `duckdb`, `mssql`, `mysql`) NOT NULL
   - `connection_mode` enum(`form`, `connection_string`) NOT NULL
   - `connection_credentials_encrypted` text NOT NULL — AES-256-GCM šifrovanie, nikdy plaintext
   - `connection_settings_json` text — timeout, SSL mode, pool size
-  - `status` enum(`connected`, `error`, `untested`) default `untested`
+  - `status` enum(`active`, `error`, `pending`) default `pending`
   - `last_tested_at` timestamp nullable
   - `created_at`, `updated_at`
-- [ ] Migrácie cez drizzle-kit
+- [x] Migrácie cez drizzle-kit (migration 0001)
 
 ### 4.2 SourceAdapter interface + adaptéry (`modules/ainderstanding/connect/lib/adapters/`)
 
@@ -67,8 +62,8 @@ Foundation layer pre AInderstanding — manažuje pripojenia na zdrojové DB s *
 
 - [x] `postgres.ts` — `pg` driver, pool size 5, connect timeout 10s, SSL optional
 - [x] `duckdb.ts` — `duckdb-async`, file_path z connection_settings_json, read-only mode flag
-- [ ] `mssql.ts` — `mssql` driver **(Phase C2, nie MVP)**
-- [ ] `mysql.ts` — `mysql2` driver **(Phase C2, nie MVP)**
+- [ ] `mssql.ts` — `mssql` driver **(Phase C2, nie MVP — deferred)**
+- [ ] `mysql.ts` — `mysql2` driver **(Phase C2, nie MVP — deferred)**
 
 ### 4.3 SQL Parser Gate (`modules/ainderstanding/connect/lib/sql-gate/`)
 
