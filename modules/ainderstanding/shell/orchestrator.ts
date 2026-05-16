@@ -4,6 +4,7 @@ import {
   type CanUseTool,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { translateSDKMessage } from './lib/sdk-message-translator';
 import { awaitApproval } from '@/core/orchestration/approval-gate';
 import { withAgentContext } from '@/core/orchestration/context';
 import { sseEmitter } from '@/core/orchestration/streaming';
@@ -467,19 +468,14 @@ export async function* createSupervisor(
   });
 
   for await (const message of stream) {
-    sseEmitter.emit(context.workspaceId, {
-      type: 'agent_message',
-      sessionId: context.sessionId,
+    const events = translateSDKMessage(message, {
       workspaceId: context.workspaceId,
-      timestamp: new Date().toISOString(),
-      payload: {
-        agentName: 'supervisor',
-        content: JSON.stringify(message),
-        isPartial: false,
-        messageId: crypto.randomUUID(),
-        role: 'assistant',
-      },
+      sessionId: context.sessionId,
+      agentName: 'supervisor',
     });
+    for (const event of events) {
+      sseEmitter.emit(context.workspaceId, event);
+    }
     yield message;
   }
 }

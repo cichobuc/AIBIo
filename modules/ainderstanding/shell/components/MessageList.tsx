@@ -11,6 +11,7 @@ import type { SSEEvent } from '@/core/orchestration/streaming';
 type ToolResult = { success: boolean; summary: string };
 
 function AgentMessage({ event }: { event: Extract<SSEEvent, { type: 'agent_message' }> }) {
+  if (!event.payload.content.trim()) return null;
   return (
     <div className="space-y-1">
       <AgentBadge name={event.payload.agentName} />
