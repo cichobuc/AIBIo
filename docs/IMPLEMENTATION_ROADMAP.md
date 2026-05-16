@@ -11,7 +11,7 @@ Implementačný poriadok a stav všetkých modulov. Číslo = implementačné po
 | 2 | connect    | C1        | done        | ~3d   | [docs/02-connect/TODO.md](./02-connect/TODO.md) |
 | 3 | explore    | E1–E2     | done        | ~4d   | [docs/03-explore/TODO.md](./03-explore/TODO.md) |
 | 4 | govern     | G1–G2     | done        | ~4d   | [docs/04-govern/TODO.md](./04-govern/TODO.md) |
-| 5 | model      | M1–M3     | not started | ~7d   | [docs/05-model/TODO.md](./05-model/TODO.md)   |
+| 5 | model      | M1–M3     | done        | ~7d   | [docs/05-model/TODO.md](./05-model/TODO.md)   |
 | 6 | document   | D1–D3     | not started | ~5d   | [docs/06-document/TODO.md](./06-document/TODO.md) |
 | 7 | test       | T1–T2     | not started | ~4d   | [docs/07-test/TODO.md](./07-test/TODO.md)     |
 | 8 | translate  | TR1–TR3   | not started | ~7d   | [docs/08-translate/TODO.md](./08-translate/TODO.md) |

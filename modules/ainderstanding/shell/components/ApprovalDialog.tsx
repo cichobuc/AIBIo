@@ -6,6 +6,7 @@ import { ExecuteQueryGate } from './approval/ExecuteQueryGate';
 import { ShareResultsGate } from './approval/ShareResultsGate';
 import { WriteFileGate } from './approval/WriteFileGate';
 import { WriteDocsGate } from './approval/WriteDocsGate';
+import { SqlDiffApprovalDialog } from '../../model/components/SqlDiffApprovalDialog';
 
 function useCountdown(timeoutAt: string | undefined): { display: string; remaining: number } {
   const [remaining, setRemaining] = useState(300);
@@ -102,14 +103,30 @@ export function ApprovalDialog() {
     );
   }
 
-  if (gateType === 'write_model_file' || gateType === 'write_test_file') {
-    type WMPayload = { modelName: string; layer: string; sqlDiff: string };
+  if (gateType === 'write_model_file') {
+    const d = details as { modelName: string; layer: string; sqlDiff: string; previousSql?: string };
+    return (
+      <SqlDiffApprovalDialog
+        agentName={agentName}
+        modelName={d.modelName ?? ''}
+        layer={d.layer ?? ''}
+        newSql={d.sqlDiff ?? ''}
+        previousSql={d.previousSql ?? ''}
+        countdown={countdown}
+        remainingSec={remaining}
+        onApprove={(finalSql) => void approve(finalSql)}
+        onDeny={() => void deny()}
+      />
+    );
+  }
+
+  if (gateType === 'write_test_file') {
     type WTPayload = { testType: 'generic' | 'custom'; modelName: string; testPreview: string };
     return (
       <WriteFileGate
         agentName={agentName}
         gateType={gateType}
-        payload={details as WMPayload | WTPayload}
+        payload={details as WTPayload}
         countdown={countdown}
         remainingSec={remaining}
         onApprove={(reason) => void approve(reason)}

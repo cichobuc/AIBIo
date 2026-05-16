@@ -17,13 +17,14 @@ export type ApprovalGateType =
 export type ApprovalGateDetails =
   | { sql: string; dataSourceName: string }                                        // execute_query
   | { rowCount: number; columns: string[]; queryPreview: string }                  // share_results_with_ai
-  | { modelName: string; layer: string; sqlDiff: string }                          // write_model_file
+  | { modelName: string; layer: string; sqlDiff: string; previousSql?: string }    // write_model_file
   | { testType: 'generic' | 'custom'; modelName: string; testPreview: string }    // write_test_file
   | { recordType: DocRecordType; name: string; description: string };              // write_to_docs
 
 export type ApprovalResult = {
   decision: 'approved' | 'denied';
   requestId: string;
+  reason?: string;
 };
 
 export type ApprovalGatePolicy = {

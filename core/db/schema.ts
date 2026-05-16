@@ -6,3 +6,4 @@ export * from './schema/data-source';
 export * from './schema/chat';
 export * from '../../modules/ainderstanding/govern/db/schema';
 export * from '../../modules/ainderstanding/explore/db/schema';
+export * from '../../modules/ainderstanding/model/db/schema';

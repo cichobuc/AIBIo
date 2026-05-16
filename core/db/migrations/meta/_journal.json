@@ -36,6 +36,13 @@
       "when": 1778944445721,
       "tag": "0004_odd_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1778959009235,
+      "tag": "0005_silky_rictor",
+      "breakpoints": true
     }
   ]
 }

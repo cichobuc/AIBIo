@@ -17,7 +17,11 @@ export async function register() {
     const { registerExploreTools } = await import(
       '@/modules/ainderstanding/explore/lib/register-tools'
     );
+    const { registerModelTools } = await import(
+      '@/modules/ainderstanding/model/lib/register-tools'
+    );
     registerGovernTools();
     registerExploreTools();
+    registerModelTools();
   }
 }

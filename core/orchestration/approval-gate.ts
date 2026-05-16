@@ -113,7 +113,7 @@ export function resolveApproval(requestId: string, decision: 'approved' | 'denie
     payload: { requestId, decision, gateType: gate.gateType, ...(reason ? { reason } : {}) },
   });
 
-  gate.resolve({ decision, requestId });
+  gate.resolve({ decision, requestId, ...(reason ? { reason } : {}) });
 }
 
 export function cleanupPendingGates(): void {
