@@ -40,8 +40,8 @@ export const tablePermissions = sqliteTable(
   (t) => [uniqueIndex('table_permissions_source_table_uidx').on(t.dataSourceId, t.tableName)],
 );
 
-export const columnPermissions = sqliteTable(
-  'column_permissions',
+export const columnMetadata = sqliteTable(
+  'column_metadata',
   {
     id: text('id').primaryKey(),
     dataSourceId: text('data_source_id')
@@ -49,6 +49,8 @@ export const columnPermissions = sqliteTable(
       .references(() => dataSources.id, { onDelete: 'cascade' }),
     tableName: text('table_name').notNull(),
     columnName: text('column_name').notNull(),
+    piiCandidate: integer('pii_candidate', { mode: 'boolean' }).notNull().default(false),
+    piiCandidateReason: text('pii_candidate_reason'),
     piiClassification: text('pii_classification', {
       enum: ['none', 'pii', 'sensitive'],
     }),
@@ -60,13 +62,17 @@ export const columnPermissions = sqliteTable(
     updatedAt: text('updated_at').notNull().default(now),
   },
   (t) => [
-    uniqueIndex('column_permissions_source_table_col_uidx').on(
+    uniqueIndex('column_metadata_source_table_col_uidx').on(
       t.dataSourceId,
       t.tableName,
       t.columnName,
     ),
+    index('column_metadata_pii_idx').on(t.dataSourceId, t.tableName, t.piiClassification),
   ],
 );
+
+export type PiiClassificationValue = 'none' | 'pii' | 'sensitive';
+export type PiiSubtypeValue = 'email' | 'phone' | 'national_id' | 'address' | 'ip' | 'name' | 'date_of_birth' | 'iban' | 'other';
 
 export const approvalSettings = sqliteTable('approval_settings', {
   id: text('id').primaryKey(),

@@ -1,5 +1,5 @@
 import { db } from '@/core/db/client';
-import { columnPermissions } from '../db/schema';
+import { columnMetadata } from '../db/schema';
 import { and, eq } from 'drizzle-orm';
 
 type PiiColumnInfo = {
@@ -37,15 +37,15 @@ export function loadPiiColumnsForTable(
 ): PiiColumnInfo[] {
   return db
     .select({
-      columnName: columnPermissions.columnName,
-      piiSubtype: columnPermissions.piiSubtype,
-      piiClassification: columnPermissions.piiClassification,
+      columnName: columnMetadata.columnName,
+      piiSubtype: columnMetadata.piiSubtype,
+      piiClassification: columnMetadata.piiClassification,
     })
-    .from(columnPermissions)
+    .from(columnMetadata)
     .where(
       and(
-        eq(columnPermissions.dataSourceId, dataSourceId),
-        eq(columnPermissions.tableName, tableName),
+        eq(columnMetadata.dataSourceId, dataSourceId),
+        eq(columnMetadata.tableName, tableName),
       ),
     )
     .all()

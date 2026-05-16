@@ -15,7 +15,7 @@ import type {
   ExploreSource,
   ExploreSourcePerm,
   ExploreTablePerm,
-  ExploreColumnPerm,
+  ExploreColumnMeta,
 } from '@/modules/ainderstanding/explore/lib/explore-data';
 
 type TableProfile = {
@@ -43,8 +43,6 @@ type ColumnProfile = {
   meanValue: number | null;
   percentilesJson: string | null;
   stringLengthDistributionJson: string | null;
-  piiCandidate: boolean;
-  piiCandidateReason: string | null;
 };
 
 type SchemaChange = {
@@ -75,7 +73,7 @@ type Props = {
   recentChanges: SchemaChange[];
   sourcePerms: ExploreSourcePerm[];
   tablePerms: ExploreTablePerm[];
-  columnPerms: ExploreColumnPerm[];
+  columnPerms: ExploreColumnMeta[];
   openSessions: QuerySession[];
 };
 
@@ -94,7 +92,7 @@ function computeEffectiveTier(
   columnName: string | null,
   sourcePerms: ExploreSourcePerm[],
   tablePerms: ExploreTablePerm[],
-  columnPerms: ExploreColumnPerm[],
+  columnPerms: ExploreColumnMeta[],
 ): AccessTier {
   const sourceTier = sourcePerms.find((p) => p.dataSourceId === sourceId)?.permissionTier ?? 'metadata_only';
   const tableOverride = tablePerms.find(

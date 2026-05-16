@@ -47,7 +47,7 @@
 | `column_profiles` | Explore | `data_sources`, `table_profiles` |
 | `source_permissions` | Govern | `data_sources` |
 | `table_permissions` | Govern | `data_sources` |
-| `column_permissions` | Govern | `data_sources` |
+| `column_metadata` | Govern | `data_sources` |
 | `approval_settings` | Govern | `workspaces` |
 | `audit_entries` | Govern | `workspaces`, `data_sources` |
 | `models` | Model | `workspaces` |
@@ -92,7 +92,7 @@ erDiagram
     data_sources ||--o{ column_profiles : "has"
     data_sources ||--o| source_permissions : "has"
     data_sources ||--o{ table_permissions : "has"
-    data_sources ||--o{ column_permissions : "has"
+    data_sources ||--o{ column_metadata : "has"
     data_sources ||--o{ audit_entries : "involves"
     data_sources ||--o{ table_descriptions : "has"
     data_sources ||--o{ column_descriptions : "has"
@@ -341,8 +341,6 @@ erDiagram
         REAL mean_value
         TEXT percentiles_json
         TEXT string_length_distribution_json
-        INTEGER pii_candidate
-        TEXT pii_candidate_reason
         TEXT profiled_at
     }
 
@@ -423,11 +421,13 @@ erDiagram
         TEXT updated_at
     }
 
-    column_permissions {
+    column_metadata {
         TEXT id PK
         TEXT data_source_id FK
         TEXT table_name
         TEXT column_name
+        INTEGER pii_candidate
+        TEXT pii_candidate_reason
         TEXT pii_classification
         TEXT pii_subtype
         TEXT set_by
@@ -464,7 +464,7 @@ erDiagram
 
     data_sources ||--o| source_permissions : "has"
     data_sources ||--o{ table_permissions : "has"
-    data_sources ||--o{ column_permissions : "has"
+    data_sources ||--o{ column_metadata : "has"
     data_sources ||--o{ audit_entries : "involves"
     workspaces ||--o| approval_settings : "has"
     workspaces ||--o{ audit_entries : "has"
@@ -476,9 +476,9 @@ erDiagram
 |---|---|
 | `source_permissions.permission_tier` | `metadata_only` / `with_reference_samples` / `with_full_samples` / `with_query_results` |
 | `table_permissions.permission_override` | rovnaké ako `permission_tier` |
-| `column_permissions.pii_classification` | `none` / `pii` / `sensitive` |
-| `column_permissions.pii_subtype` | `email` / `phone` / `national_id` / `address` / `ip` / `name` / `date_of_birth` / `iban` / `other` / `NULL` |
-| `column_permissions.set_by` | `user` / `heuristic` |
+| `column_metadata.pii_classification` | `none` / `pii` / `sensitive` / `NULL` (unclassified) |
+| `column_metadata.pii_subtype` | `email` / `phone` / `national_id` / `address` / `ip` / `name` / `date_of_birth` / `iban` / `other` / `NULL` |
+| `column_metadata.set_by` | `user` / `heuristic` |
 | `approval_settings.default_permission_tier_new_source` | `metadata_only` / `with_reference_samples` / `with_full_samples` / `with_query_results` |
 | `approval_settings.policy_execute_query` | `always_ask` / `never_ask` / `threshold_based` |
 | `approval_settings.policy_share_results` | `always_ask` / `never_ask` / `auto_reference` |
@@ -503,7 +503,7 @@ erDiagram
 - `data_source_id` na `source_permissions` (1:1 per source)
 - `workspace_id` na `approval_settings` (1:1 per workspace)
 - `(data_source_id, table_name)` na `table_permissions`
-- `(data_source_id, table_name, column_name)` na `column_permissions`
+- `(data_source_id, table_name, column_name)` na `column_metadata`
 
 ### Poznámky
 
@@ -511,7 +511,7 @@ erDiagram
 - `audit_entries.session_id` odkazuje na `session_id` z `chat_messages` (nie FK — sessions sú in-memory, `session_id` je len korelačný string). Umožňuje AuditLogViewer filtrovať "čo sa stalo počas tejto session".
 - **Query result cache** — `guarded_run_select_query` cachuje výsledky in-memory (`Map<string, QueryResult>` v server procese) pod `query_result_id`. Nie je perzistovaný do SQLite — zámerom je GDPR: raw query výsledky sa neukladajú dlhšie ako je nevyhnutné. Cache expiruje pri reštarte servera. `guarded_share_results` číta z tejto cache; volanie je obmedzené na rovnakú session. **Known limitation:** reštart servera medzi `run_query` a `share_results` zmaže cache → user dostane `results_expired` error.
 - **Permission resolution pre `guarded_sample_data()`** — pri rozhodnutí či poskytnúť sample dáta platí táto prioritná hierarchia (vyššie = silnejšie):
-  1. **PII columns** (`column_permissions.pii_classification != 'none'`) — daný stĺpec sa vždy maskuje alebo vylúčí, bez ohľadu na čokoľvek iné
+  1. **PII columns** (`column_metadata.pii_classification != 'none'`) — daný stĺpec sa vždy maskuje alebo vylúčí, bez ohľadu na čokoľvek iné
   2. **Govern per-table override** (`table_permissions.permission_override IS NOT NULL`) — prepisuje source tier pre danú tabuľku (Govern je enforcement layer)
   3. **Explore reference flag** (`table_profiles.sample_permission_override IS NOT NULL`) — per-table `allow`/`deny` nastavený keď user označí tabuľku ako reference; aplikuje sa iba ak Govern nemá explicitný override pre túto tabuľku
   4. **Source tier** (`source_permissions.permission_tier`) — source-level default, uplatní sa ak ani Govern ani Explore nemajú override
@@ -886,7 +886,7 @@ erDiagram
 
 ### PII zrkadlenie
 
-`column_descriptions.pii_classification` je mirror z `column_permissions.pii_classification`. Govern je source of truth — `docs-keeper` číta z `column_permissions` a kopíruje hodnotu pri `write_doc_record`. Nikdy nenastavuje unilaterálne.
+`column_descriptions.pii_classification` je mirror z `column_metadata.pii_classification`. Govern je source of truth — `docs-keeper` číta z `column_metadata` a kopíruje hodnotu pri `write_doc_record`. Nikdy nenastavuje unilaterálne.
 
 ---
 
@@ -1010,7 +1010,7 @@ Explicitne definované composite indexy pre najčastejšie dotazy. Drizzle ich g
 |---|---|---|
 | `audit_entries` | `(workspace_id, created_at DESC)` | AuditLogViewer — chronologický filter per workspace |
 | `chat_messages` | `(workspace_id, session_id, created_at)` | Chat history reload po SSE reconnecte |
-| `column_profiles` | `(table_profile_id, pii_candidate)` | PII Inventory panel — rýchly filter PII stĺpcov |
+| `column_metadata` | `(data_source_id, table_name, pii_classification)` | PII Inventory panel — rýchly filter PII stĺpcov per source |
 | `translate_snippets` | `(model_id, language_id)` | Snippet cache lookup — najčastejší prístupový vzor |
 | `models` | `(workspace_id, layer)` | ModelExplorer tree view — groupBy layer |
 

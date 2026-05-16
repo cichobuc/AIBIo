@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { db } from '@/core/db/client';
 import {
   sourcePermissions,
   tablePermissions,
-  columnPermissions,
+  columnMetadata,
   type PermissionTierValue,
 } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -52,12 +53,12 @@ export function getEffectivePermission(
   if (tableName && columnName) {
     const col = db
       .select()
-      .from(columnPermissions)
+      .from(columnMetadata)
       .where(
         and(
-          eq(columnPermissions.dataSourceId, dataSourceId),
-          eq(columnPermissions.tableName, tableName),
-          eq(columnPermissions.columnName, columnName),
+          eq(columnMetadata.dataSourceId, dataSourceId),
+          eq(columnMetadata.tableName, tableName),
+          eq(columnMetadata.columnName, columnName),
         ),
       )
       .get();
@@ -73,12 +74,12 @@ export function getEffectivePermission(
 export function isColumnPii(dataSourceId: string, tableName: string, columnName: string): boolean {
   const col = db
     .select()
-    .from(columnPermissions)
+    .from(columnMetadata)
     .where(
       and(
-        eq(columnPermissions.dataSourceId, dataSourceId),
-        eq(columnPermissions.tableName, tableName),
-        eq(columnPermissions.columnName, columnName),
+        eq(columnMetadata.dataSourceId, dataSourceId),
+        eq(columnMetadata.tableName, tableName),
+        eq(columnMetadata.columnName, columnName),
       ),
     )
     .get();
@@ -86,17 +87,61 @@ export function isColumnPii(dataSourceId: string, tableName: string, columnName:
   return col?.piiClassification != null && col.piiClassification !== 'none';
 }
 
+// Profiler-only write — never clobbers user classifications (set_by='user')
+export function upsertHeuristicPiiSignal(
+  dataSourceId: string,
+  tableName: string,
+  columnName: string,
+  piiCandidate: boolean,
+  piiCandidateReason: string | null,
+): void {
+  const now = new Date().toISOString();
+  const existing = db
+    .select()
+    .from(columnMetadata)
+    .where(
+      and(
+        eq(columnMetadata.dataSourceId, dataSourceId),
+        eq(columnMetadata.tableName, tableName),
+        eq(columnMetadata.columnName, columnName),
+      ),
+    )
+    .get();
+
+  if (existing) {
+    // Only update the heuristic signal; never touch classification fields set by user
+    db.update(columnMetadata)
+      .set({ piiCandidate, piiCandidateReason, updatedAt: now })
+      .where(eq(columnMetadata.id, existing.id))
+      .run();
+  } else {
+    db.insert(columnMetadata)
+      .values({
+        id: randomUUID(),
+        dataSourceId,
+        tableName,
+        columnName,
+        piiCandidate,
+        piiCandidateReason,
+        setBy: 'heuristic',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+  }
+}
+
 export function getPiiColumns(
   dataSourceId: string,
   tableName: string,
 ): Array<{ columnName: string; piiSubtype: string | null }> {
   return db
-    .select({ columnName: columnPermissions.columnName, piiSubtype: columnPermissions.piiSubtype })
-    .from(columnPermissions)
+    .select({ columnName: columnMetadata.columnName, piiSubtype: columnMetadata.piiSubtype })
+    .from(columnMetadata)
     .where(
       and(
-        eq(columnPermissions.dataSourceId, dataSourceId),
-        eq(columnPermissions.tableName, tableName),
+        eq(columnMetadata.dataSourceId, dataSourceId),
+        eq(columnMetadata.tableName, tableName),
       ),
     )
     .all()

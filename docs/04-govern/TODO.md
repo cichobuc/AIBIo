@@ -124,26 +124,23 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 
 ### 4.5 API endpointy
 
-- [x] `app/api/govern/column-permissions/route.ts` — POST:
+- [x] `app/api/govern/column-metadata/route.ts` — POST:
   - Body: `{ dataSourceId, workspaceId, tableName, columnName, piiClassification, piiSubtype, setBy }`
-  - Uloží do `column_permissions` (upsert), audit log
-  - Volaný z PIICandidatesPanel (Explore) a ClassifyColumnTab (Govern)
+  - Uloží do `column_metadata` (upsert classification fields, `setBy='user'`), audit log
+  - Volaný z ClassifyColumnSheet (Govern) a context menu (Explore schema tree)
 - [ ] `app/api/approvals/[requestId]/route.ts` — **existuje z Core**, iba overiť integráciu s `approval_settings.policy_*`
 
 ### 4.6 UI komponenty (`app/workspace/[workspaceId]/govern/`)
 
-- [x] `page.tsx` — 3 taby: Permissions / PII Inventory / Audit Log (direct Drizzle DB queries)
-- [x] `modules/ainderstanding/govern/components/PermissionsPanel.tsx`:
-  - Per-source permission tier dropdown (auto-save)
-  - Per-table overrides (collapsible, add/remove)
-  - Approval policy settings (5 policy dropdowns incl. timeout)
+- [x] `page.tsx` — 2 taby: PII Inventory / Audit Log; deep-link `?tab=pii&source=&table=&column=` highlight; `?tab=permissions` redirect na `?tab=pii`
+- [x] ~~`modules/ainderstanding/govern/components/PermissionsPanel.tsx`~~ — **odstránený** (presunutý do Settings → Approval Gates + Schema tree inline controls)
 - [x] `modules/ainderstanding/govern/components/PIIInventoryDashboard.tsx`:
   - Filter: source / pii_type / status — client-side
   - Per-row: Edit button opens ClassifyColumnSheet; CSV export
 - [x] `modules/ainderstanding/govern/components/ClassifyColumnSheet.tsx` — side drawer classification:
   - GDPR Layer radio group (L1/L2/L3) + PII subtype radios
   - AI suggestion badge; useEffect syncs state on re-open
-  - Save → POST `/api/govern/column-permissions` with `setBy: 'user'`
+  - Save → POST `/api/govern/column-metadata` with `setBy: 'user'`
 - [x] `modules/ainderstanding/govern/components/BulkClassifySheet.tsx` — per-row select dropdowns + Save all (sequential POST)
 - [x] `modules/ainderstanding/govern/components/PiiTypeRadios.tsx` — shared 9-subtype radio group
 - [x] `modules/ainderstanding/govern/components/PiiLayerChip.tsx` — L1/L2/L3 chip with layer CSS tokens
@@ -167,7 +164,7 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 - [ ] BR-GOV-022: ApprovalDeniedError nie je trigger pre retry v sql-writer
 - [ ] BR-GOV-023: approval je per-request jednorazový (pokiaľ nie je "Approve for session" zvolené)
 - [x] BR-GOV-030: PII masking non-bypassable — aj reference tables, aj po share_results_with_ai approve
-- [x] BR-GOV-032: `column_permissions` je source of truth pre PII — ClassifyColumnSheet ukladá s `setBy: 'user'`
+- [x] BR-GOV-032: `column_metadata` je source of truth pre PII — ClassifyColumnSheet + Schema tree context menu ukladajú s `setBy: 'user'`; profiler nikdy neprepíše `set_by='user'` riadky
 - [x] BR-GOV-041: audit log je append-only — žiadny UPDATE/DELETE na `audit_entries`, žiadna UI možnosť vypnúť
 - [x] BR-GOV-042: blocked operácie (outcome=denied/timeout) musia byť zaauditované
 - [x] BR-GOV-050: result handle TTL 5 min (300s), in-memory iba

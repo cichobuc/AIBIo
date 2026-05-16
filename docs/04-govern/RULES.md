@@ -78,9 +78,9 @@ Rule: Masking sa aplikuje pred odovzdaním hodnôt agentovi. Neexistuje agent-re
 Condition: Masked hodnota  
 Rule: Default `[{TYPE}_MASKED]` (napr. `[Email_MASKED]`). Konfigurovateľné cez `pii_masking_format` setting.
 
-**BR-GOV-032** — `column_permissions` je source of truth pre PII classification  
+**BR-GOV-032** — `column_metadata` je source of truth pre PII classification  
 Condition: PII classification pre column  
-Rule: Source of truth je `column_permissions.pii_classification`. Explore's `pii_candidates` sú iba suggestions — neprepisujú `column_permissions` priamo. User musí confirm v Govern.
+Rule: Source of truth je `column_metadata.pii_classification`. `column_metadata.pii_candidate` je heuristický signál z Explore profilera — profiler nikdy neprepisuje `pii_classification` / `pii_subtype` ani `set_by` na riadkoch kde `set_by='user'`. User klasifikácia v Govern nastavuje `set_by='user'` cez `upsertHeuristicPiiSignal` nie je volaná po existujúcom user riadku.
 
 ---
 

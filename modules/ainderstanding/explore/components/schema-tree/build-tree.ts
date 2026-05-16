@@ -5,7 +5,7 @@ import type {
   ExploreColumnProfile,
   ExploreSourcePerm,
   ExploreTablePerm,
-  ExploreColumnPerm,
+  ExploreColumnMeta,
 } from '../../lib/explore-data';
 import type {
   TreeNode,
@@ -45,7 +45,7 @@ type BuildArgs = {
   columnProfiles: Map<string, ExploreColumnProfile[]>;
   sourcePerms: ExploreSourcePerm[];
   tablePerms: ExploreTablePerm[];
-  columnPerms: ExploreColumnPerm[];
+  columnPerms: ExploreColumnMeta[];
 };
 
 function nodeId(...parts: string[]): string {
@@ -55,7 +55,7 @@ function nodeId(...parts: string[]): string {
 function buildPermMaps(
   sourcePerms: ExploreSourcePerm[],
   tablePerms: ExploreTablePerm[],
-  columnPerms: ExploreColumnPerm[],
+  columnPerms: ExploreColumnMeta[],
 ): PermMaps {
   const sources = new Map<string, AccessTier>();
   for (const p of sourcePerms) sources.set(p.dataSourceId, p.permissionTier);
@@ -66,7 +66,7 @@ function buildPermMaps(
   const columns = new Map<string, { piiClassification: PiiClassification; piiSubtype: string | null }>();
   for (const p of columnPerms) {
     columns.set(`${p.dataSourceId}::${p.tableName}::${p.columnName}`, {
-      piiClassification: p.piiClassification,
+      piiClassification: (p.piiClassification ?? 'none') as PiiClassification,
       piiSubtype: p.piiSubtype,
     });
   }

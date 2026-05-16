@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/core/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/core/ui/select';
 import type { AccessTier } from './schema-tree/types';
+import { TIER_LABELS as SHARED_TIER_LABELS } from '@/modules/ainderstanding/govern/lib/tier-labels';
 
 type PiiClassification = 'none' | 'pii' | 'sensitive';
 type PiiSubtype = 'email' | 'phone' | 'national_id' | 'address' | 'ip' | 'name' | 'date_of_birth' | 'iban' | 'other';
@@ -33,12 +34,7 @@ type Props = {
   profile: ColumnProfile;
 };
 
-const TIER_LABELS: Record<AccessTier, string> = {
-  metadata_only: 'Metadata only',
-  with_reference_samples: 'Ref samples',
-  with_full_samples: 'Full samples',
-  with_query_results: 'Full + queries',
-};
+const TIER_LABELS = SHARED_TIER_LABELS;
 
 const TIER_COLORS: Record<AccessTier, string> = {
   metadata_only: 'text-muted-foreground',
@@ -148,7 +144,7 @@ export function ColumnProfileDetailTab({ profile }: Props) {
     profile.topValuesJson && !isRedacted ? JSON.parse(profile.topValuesJson) : [];
 
   const savePiiClassification = async (classification: PiiClassification, subtype?: PiiSubtype | '') => {
-    await fetch('/api/govern/column-permissions', {
+    await fetch('/api/govern/column-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -6,7 +6,7 @@ import {
   tablePermissions,
   approvalSettings,
   auditEntries,
-  columnPermissions,
+  columnMetadata,
 } from '@/core/db/schema';
 import { and, eq, desc, gte, inArray, like } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -67,8 +67,8 @@ export async function GET(
   const piiColumns = sourceIds.length
     ? db
         .select()
-        .from(columnPermissions)
-        .where(inArray(columnPermissions.dataSourceId, sourceIds))
+        .from(columnMetadata)
+        .where(inArray(columnMetadata.dataSourceId, sourceIds))
         .all()
         .filter((c) => c.piiClassification && c.piiClassification !== 'none')
     : [];

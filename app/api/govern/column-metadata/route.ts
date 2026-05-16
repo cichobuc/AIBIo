@@ -45,6 +45,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .get();
 
   if (existing) {
+    // Only update classification fields — never touch piiCandidate/piiCandidateReason (profiler-owned)
     db.update(columnMetadata)
       .set({
         piiClassification,
@@ -61,6 +62,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         dataSourceId,
         tableName,
         columnName,
+        piiCandidate: false,
         piiClassification,
         piiSubtype: piiSubtype ?? null,
         setBy,

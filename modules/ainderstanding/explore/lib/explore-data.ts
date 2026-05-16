@@ -7,7 +7,7 @@ import {
   schemaChanges,
   sourcePermissions,
   tablePermissions,
-  columnPermissions,
+  columnMetadata,
   type PermissionTierValue,
 } from '@/core/db/schema';
 import { eq, desc, inArray } from 'drizzle-orm';
@@ -34,12 +34,15 @@ export type ExploreTablePerm = {
   permissionOverride: PermissionTierValue;
 };
 
-export type ExploreColumnPerm = {
+export type ExploreColumnMeta = {
   dataSourceId: string;
   tableName: string;
   columnName: string;
-  piiClassification: 'none' | 'pii' | 'sensitive';
+  piiCandidate: boolean;
+  piiCandidateReason: string | null;
+  piiClassification: 'none' | 'pii' | 'sensitive' | null;
   piiSubtype: string | null;
+  setBy: 'user' | 'heuristic';
 };
 
 export type ExploreData = {
@@ -50,7 +53,7 @@ export type ExploreData = {
   recentChanges: ExploreSchemaChange[];
   sourcePerms: ExploreSourcePerm[];
   tablePerms: ExploreTablePerm[];
-  columnPerms: ExploreColumnPerm[];
+  columnPerms: ExploreColumnMeta[];
 };
 
 export function getExploreData(workspaceId: string): ExploreData {
@@ -118,16 +121,19 @@ export function getExploreData(workspaceId: string): ExploreData {
     .where(inArray(tablePermissions.dataSourceId, sourceIds))
     .all();
 
-  const rawColumnPerms = db
+  const rawColumnMeta = db
     .select({
-      dataSourceId: columnPermissions.dataSourceId,
-      tableName: columnPermissions.tableName,
-      columnName: columnPermissions.columnName,
-      piiClassification: columnPermissions.piiClassification,
-      piiSubtype: columnPermissions.piiSubtype,
+      dataSourceId: columnMetadata.dataSourceId,
+      tableName: columnMetadata.tableName,
+      columnName: columnMetadata.columnName,
+      piiCandidate: columnMetadata.piiCandidate,
+      piiCandidateReason: columnMetadata.piiCandidateReason,
+      piiClassification: columnMetadata.piiClassification,
+      piiSubtype: columnMetadata.piiSubtype,
+      setBy: columnMetadata.setBy,
     })
-    .from(columnPermissions)
-    .where(inArray(columnPermissions.dataSourceId, sourceIds))
+    .from(columnMetadata)
+    .where(inArray(columnMetadata.dataSourceId, sourceIds))
     .all();
 
   return {
@@ -138,14 +144,15 @@ export function getExploreData(workspaceId: string): ExploreData {
     recentChanges,
     sourcePerms: rawSourcePerms as ExploreSourcePerm[],
     tablePerms: rawTablePerms.filter((r) => r.permissionOverride != null) as ExploreTablePerm[],
-    columnPerms: rawColumnPerms
-      .filter((r) => r.piiClassification != null)
-      .map((r) => ({
-        dataSourceId: r.dataSourceId,
-        tableName: r.tableName,
-        columnName: r.columnName,
-        piiClassification: r.piiClassification as 'none' | 'pii' | 'sensitive',
-        piiSubtype: r.piiSubtype ?? null,
-      })),
+    columnPerms: rawColumnMeta.map((r) => ({
+      dataSourceId: r.dataSourceId,
+      tableName: r.tableName,
+      columnName: r.columnName,
+      piiCandidate: r.piiCandidate ?? false,
+      piiCandidateReason: r.piiCandidateReason ?? null,
+      piiClassification: r.piiClassification as 'none' | 'pii' | 'sensitive' | null,
+      piiSubtype: r.piiSubtype ?? null,
+      setBy: r.setBy as 'user' | 'heuristic',
+    })),
   };
 }

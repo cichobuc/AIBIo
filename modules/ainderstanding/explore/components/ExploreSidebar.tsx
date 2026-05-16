@@ -15,6 +15,7 @@ import {
 import { AddSourceWizard } from '@/modules/ainderstanding/connect/components/AddSourceWizard';
 import { EditSourceDrawer } from '@/modules/ainderstanding/connect/components/EditSourceDrawer';
 import { RemoveSourceDialog } from '@/modules/ainderstanding/connect/components/RemoveSourceDialog';
+import { TableOverrideDialog } from './schema-tree/TableOverrideDialog';
 import { AddInExploreMenu } from './AddInExploreMenu';
 import { SourcePickerDialog } from './query-editor/SourcePickerDialog';
 import type { DataSource, SchemaSnapshot } from '@/core/types/workspace';
@@ -24,7 +25,7 @@ import type {
   ExploreColumnProfile,
   ExploreSourcePerm,
   ExploreTablePerm,
-  ExploreColumnPerm,
+  ExploreColumnMeta,
 } from '../lib/explore-data';
 
 type SnapshotRow = { dataSourceId: string; snapshotJson: string };
@@ -41,7 +42,7 @@ type Props = {
   columns: ExploreColumnProfile[];
   sourcePerms: ExploreSourcePerm[];
   tablePerms: ExploreTablePerm[];
-  columnPerms: ExploreColumnPerm[];
+  columnPerms: ExploreColumnMeta[];
 };
 
 function loadExpanded(workspaceId: string): Set<string> {
@@ -79,6 +80,7 @@ export function ExploreSidebar({
   const [queryPickerOpen, setQueryPickerOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [removingSource, setRemovingSource] = useState<DataSource | null>(null);
+  const [overrideDialogSourceId, setOverrideDialogSourceId] = useState<string | null>(null);
 
   useEffect(() => {
     saveExpanded(workspaceId, expanded);
@@ -325,7 +327,7 @@ export function ExploreSidebar({
               'set-pii-pii': 'pii',
               'set-pii-sensitive': 'sensitive',
             } as const;
-            await fetch('/api/govern/column-permissions', {
+            await fetch('/api/govern/column-metadata', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -338,6 +340,19 @@ export function ExploreSidebar({
               }),
             }).catch(() => {});
             router.refresh();
+          }
+          break;
+        }
+
+        case 'add-table-override':
+          setOverrideDialogSourceId(sourceId);
+          break;
+
+        case 'open-pii-inventory': {
+          if (node.kind === 'column') {
+            router.push(
+              `/workspace/${workspaceId}/govern?tab=pii&source=${encodeURIComponent(sourceId)}&table=${encodeURIComponent(node.parentName)}&column=${encodeURIComponent(node.columnName)}`,
+            );
           }
           break;
         }
@@ -442,6 +457,29 @@ export function ExploreSidebar({
           onConfirm={handleRemoveConfirm}
         />
       )}
+
+      <TableOverrideDialog
+        open={!!overrideDialogSourceId}
+        onClose={() => setOverrideDialogSourceId(null)}
+        existingTables={tablePerms
+          .filter((p) => p.dataSourceId === overrideDialogSourceId && p.permissionOverride !== null)
+          .map((p) => p.tableName)}
+        onSave={async (tableName, tier) => {
+          setOverrideDialogSourceId(null);
+          if (!overrideDialogSourceId) return;
+          await fetch('/api/govern/table-permissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              workspaceId,
+              dataSourceId: overrideDialogSourceId,
+              tableName,
+              permissionOverride: tier,
+            }),
+          }).catch(() => {});
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

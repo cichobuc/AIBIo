@@ -43,6 +43,13 @@
       "when": 1778959009235,
       "tag": "0005_silky_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1747382400000,
+      "tag": "0006_column_metadata",
+      "breakpoints": true
     }
   ]
 }

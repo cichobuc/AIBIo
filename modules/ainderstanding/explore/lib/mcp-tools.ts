@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db } from '@/core/db/client';
 import { schemaSnapshots, schemaChanges, tableProfiles, columnProfiles } from '../db/schema';
+import { columnMetadata } from '@/modules/ainderstanding/govern/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import type { SchemaSnapshot } from '@/core/types/workspace';
 import { diffSnapshots } from './schema-differ';
@@ -8,6 +9,7 @@ import { detectPii } from './pii-heuristics';
 import { computeColumnStats } from './profile-runner';
 import { buildProfileQuery } from './sampling-strategy';
 import { profileTable } from '@/modules/ainderstanding/govern/lib/internal-adapter';
+import { upsertHeuristicPiiSignal } from '@/modules/ainderstanding/govern/lib/permission-service';
 import type { SourceAdapter } from '@/modules/ainderstanding/connect/lib/adapters/factory';
 
 // Layer 1 — no permission check (schema metadata)
@@ -144,7 +146,18 @@ export async function suggestReferenceTableFlags(
       )
       .all();
 
-    const hasPii = cols.some((c) => c.piiCandidate);
+    const piiMeta = db
+      .select({ columnName: columnMetadata.columnName, piiCandidate: columnMetadata.piiCandidate })
+      .from(columnMetadata)
+      .where(
+        and(
+          eq(columnMetadata.dataSourceId, dataSourceId),
+          eq(columnMetadata.tableName, profile.tableName),
+        ),
+      )
+      .all();
+
+    const hasPii = piiMeta.some((c) => c.piiCandidate);
     if (hasPii) continue;
 
     const highCardinality = cols.some((c) => {
@@ -253,8 +266,6 @@ export async function runProfileQuery(input: RunProfileQueryInput): Promise<void
       stringLengthDistributionJson: stats.stringLengthDistribution
         ? JSON.stringify(stats.stringLengthDistribution)
         : null,
-      piiCandidate: piiResult.isPiiCandidate,
-      piiCandidateReason: piiResult.isPiiCandidate ? piiResult.reason : null,
       profiledAt: now,
     };
 
@@ -265,5 +276,13 @@ export async function runProfileQuery(input: RunProfileQueryInput): Promise<void
         .values({ id: randomUUID(), ...colProfileData })
         .run();
     }
+
+    upsertHeuristicPiiSignal(
+      dataSourceId,
+      tableName,
+      colName,
+      piiResult.isPiiCandidate,
+      piiResult.isPiiCandidate ? piiResult.reason : null,
+    );
   }
 }

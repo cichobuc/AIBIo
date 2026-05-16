@@ -61,7 +61,7 @@ export function ClassifyColumnSheet({ target, onClose }: Props) {
   const handleSave = async () => {
     if (!target) return;
     setSaving(true);
-    await fetch('/api/govern/column-permissions', {
+    await fetch('/api/govern/column-metadata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

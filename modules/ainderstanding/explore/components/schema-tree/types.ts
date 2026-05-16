@@ -113,4 +113,6 @@ export type ContextAction =
   | 'clear-table-override'
   | 'set-pii-none'
   | 'set-pii-pii'
-  | 'set-pii-sensitive';
+  | 'set-pii-sensitive'
+  | 'open-pii-inventory'
+  | 'add-table-override';

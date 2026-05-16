@@ -17,7 +17,7 @@ import { useWorkspaceStore } from '../store/workspace-store';
 
 const MODULES = [
   { key: 'explore', icon: Database, label: 'Explore', tip: 'Schema & connections' },
-  { key: 'govern', icon: Shield, label: 'Govern', tip: 'GDPR & permissions' },
+  { key: 'govern', icon: Shield, label: 'Govern', tip: 'PII Inventory & Audit' },
   { key: 'model', icon: Layers, label: 'Model', tip: 'Dimensional model' },
   { key: 'document', icon: FileText, label: 'Document', tip: 'Governance docs' },
   { key: 'test', icon: CheckSquare, label: 'Test', tip: 'Data quality' },

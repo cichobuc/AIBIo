@@ -94,8 +94,6 @@ export const columnProfiles = sqliteTable(
     meanValue: real('mean_value'),
     percentilesJson: text('percentiles_json'),
     stringLengthDistributionJson: text('string_length_distribution_json'),
-    piiCandidate: integer('pii_candidate', { mode: 'boolean' }).notNull().default(false),
-    piiCandidateReason: text('pii_candidate_reason'),
     profiledAt: text('profiled_at'),
   },
   (t) => [

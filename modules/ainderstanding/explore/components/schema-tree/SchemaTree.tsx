@@ -5,15 +5,12 @@ import {
   FolderTree,
   Table2,
   Eye,
-  EyeOff,
   FunctionSquare,
   KeyRound,
   Columns3,
   ChevronRight,
   ChevronDown,
-  Shield,
   Lock,
-  Unlock,
 } from 'lucide-react';
 import {
   ContextMenu,
@@ -26,8 +23,13 @@ import {
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
   ContextMenuTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
   cn,
 } from '@/core/ui';
+import { TIER_LABELS, TIER_DESCRIPTIONS, TIER_ICONS } from '@/modules/ainderstanding/govern/lib/tier-labels';
 import type { TreeNode, ContextAction, GroupType, AccessTier } from './types';
 
 type TreeCallbacks = {
@@ -63,18 +65,24 @@ const GROUP_LABELS: Record<GroupType, string> = {
 };
 
 
-function TierIcon({ tier, className }: { tier: AccessTier; className?: string }) {
-  const base = cn('h-3 w-3 shrink-0', className);
-  switch (tier) {
-    case 'metadata_only':
-      return <Shield className={cn(base, 'text-muted-foreground/60')} />;
-    case 'with_reference_samples':
-      return <EyeOff className={cn(base, 'text-amber-400')} />;
-    case 'with_full_samples':
-      return <Eye className={cn(base, 'text-blue-400')} />;
-    case 'with_query_results':
-      return <Unlock className={cn(base, 'text-green-500')} />;
-  }
+function TierIcon({ tier, className, withTooltip }: { tier: AccessTier; className?: string; withTooltip?: boolean }) {
+  const spec = TIER_ICONS[tier];
+  const Icon = spec.icon;
+  const icon = <Icon className={cn('h-3 w-3 shrink-0', spec.className, className)} />;
+
+  if (!withTooltip) return icon;
+
+  return (
+    <TooltipProvider delayDuration={400}>
+      <Tooltip>
+        <TooltipTrigger asChild>{icon}</TooltipTrigger>
+        <TooltipContent side="right" className="text-xs max-w-48">
+          <p className="font-medium">{TIER_LABELS[tier]}</p>
+          <p className="text-muted-foreground">{TIER_DESCRIPTIONS[tier]}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function TierSubmenu({ currentTier, node, onContextAction }: {
@@ -90,38 +98,20 @@ function TierSubmenu({ currentTier, node, onContextAction }: {
       </ContextMenuSubTrigger>
       <ContextMenuSubContent>
         <ContextMenuRadioGroup value={currentTier}>
-          <ContextMenuRadioItem
-            className="text-xs"
-            value="metadata_only"
-            onSelect={() => onContextAction('set-tier-metadata', node)}
-          >
-            <Shield className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
-            Metadata only
-          </ContextMenuRadioItem>
-          <ContextMenuRadioItem
-            className="text-xs"
-            value="with_reference_samples"
-            onSelect={() => onContextAction('set-tier-reference', node)}
-          >
-            <EyeOff className="h-3 w-3 mr-1.5 text-amber-400" />
-            Reference tables only
-          </ContextMenuRadioItem>
-          <ContextMenuRadioItem
-            className="text-xs"
-            value="with_full_samples"
-            onSelect={() => onContextAction('set-tier-full', node)}
-          >
-            <Eye className="h-3 w-3 mr-1.5 text-blue-400" />
-            Full samples
-          </ContextMenuRadioItem>
-          <ContextMenuRadioItem
-            className="text-xs"
-            value="with_query_results"
-            onSelect={() => onContextAction('set-tier-query', node)}
-          >
-            <Unlock className="h-3 w-3 mr-1.5 text-green-500" />
-            Full + query results
-          </ContextMenuRadioItem>
+          {([
+            { tier: 'metadata_only' as const, action: 'set-tier-metadata' as const, label: 'Metadata only' },
+            { tier: 'with_reference_samples' as const, action: 'set-tier-reference' as const, label: 'Reference tables only' },
+            { tier: 'with_full_samples' as const, action: 'set-tier-full' as const, label: 'Full samples' },
+            { tier: 'with_query_results' as const, action: 'set-tier-query' as const, label: 'Full + query results' },
+          ]).map(({ tier, action, label }) => {
+            const { icon: Icon, className: iconCls } = TIER_ICONS[tier];
+            return (
+              <ContextMenuRadioItem key={tier} className="text-xs" value={tier} onSelect={() => onContextAction(action, node)}>
+                <Icon className={cn('h-3 w-3 mr-1.5', iconCls)} />
+                {label}
+              </ContextMenuRadioItem>
+            );
+          })}
         </ContextMenuRadioGroup>
       </ContextMenuSubContent>
     </ContextMenuSub>
@@ -176,7 +166,7 @@ function TreeRow({
             </span>
 
             <NodeIcon node={node} />
-            <NodeLabel node={node} />
+            <NodeLabel node={node} onContextAction={onContextAction} />
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -186,6 +176,9 @@ function TreeRow({
               <ContextMenuItem className="text-xs" onSelect={() => onContextAction('test', node)}>Test connection</ContextMenuItem>
               <ContextMenuSeparator />
               <TierSubmenu currentTier={node.effectiveTier} node={node} onContextAction={onContextAction} />
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('add-table-override', node)}>
+                Add table override…
+              </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem className="text-xs" onSelect={() => onContextAction('refresh-schema', node)}>Refresh schema</ContextMenuItem>
               <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
@@ -233,7 +226,7 @@ function TreeRow({
                   {node.piiClassification !== 'none' ? (
                     <Lock className="h-3 w-3 mr-1.5 text-destructive" />
                   ) : (
-                    <Shield className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
+                    <Lock className="h-3 w-3 mr-1.5 text-muted-foreground/40" />
                   )}
                   PII classification…
                 </ContextMenuSubTrigger>
@@ -307,7 +300,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
               STATUS_DOT[node.status] ?? 'bg-muted-foreground',
             )}
           />
-          <TierIcon tier={node.effectiveTier} />
+          <TierIcon tier={node.effectiveTier} withTooltip />
         </span>
       );
     case 'schema': return <FolderTree className={cls} />;
@@ -319,7 +312,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
       return (
         <span className="flex items-center gap-0.5">
           <Table2 className={cls} />
-          <TierIcon tier={node.effectiveTier} />
+          <TierIcon tier={node.effectiveTier} withTooltip />
         </span>
       );
     case 'view': return <Eye className={cls} />;
@@ -337,7 +330,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
   }
 }
 
-function NodeLabel({ node }: { node: TreeNode }) {
+function NodeLabel({ node, onContextAction }: { node: TreeNode; onContextAction?: (action: ContextAction, node: TreeNode) => void }) {
   switch (node.kind) {
     case 'connection':
       return <span className="overflow-hidden text-ellipsis whitespace-nowrap font-medium">{node.name}</span>;
@@ -374,7 +367,15 @@ function NodeLabel({ node }: { node: TreeNode }) {
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{node.columnName}</span>
           <span className="shrink-0 text-[10px] text-muted-foreground">{node.dataType}</span>
           {node.piiClassification !== 'none' && (
-            <span className="shrink-0 text-[10px] text-destructive uppercase">{node.piiClassification}</span>
+            <button
+              className="shrink-0 cursor-pointer rounded text-[10px] text-destructive uppercase hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                onContextAction?.('open-pii-inventory', node);
+              }}
+            >
+              {node.piiClassification}
+            </button>
           )}
         </span>
       );

@@ -13,6 +13,7 @@ import { SettingsSidebar } from './SettingsSidebar';
 import { useSettingsPatch } from './useSettingsPatch';
 import { AIBehaviorSection } from './sections/AIBehaviorSection';
 import { ApprovalGatesSection } from './sections/ApprovalGatesSection';
+import type { ApprovalSettingsRow } from '@/modules/ainderstanding/govern/lib/types';
 import { DataProfilingSection } from './sections/DataProfilingSection';
 import { ModelsSqlSection } from './sections/ModelsSqlSection';
 import { DocumentationSection } from './sections/DocumentationSection';
@@ -88,6 +89,7 @@ export function SettingsDialog({ workspaceId, workspaceName }: Props) {
   const setActiveSection = useWorkspaceStore((s) => s.setActiveSettingsSection);
 
   const [local, setLocal] = useState<WorkspaceSettingsLocal>(DEFAULTS);
+  const [approval, setApproval] = useState<ApprovalSettingsRow | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const patch = useSettingsPatch(workspaceId, (field, prev) => {
@@ -100,9 +102,12 @@ export function SettingsDialog({ workspaceId, workspaceName }: Props) {
     Promise.all([
       fetch(`/api/workspaces/${workspaceId}/settings`).then((r) => r.json()),
       fetch(`/api/workspaces/${workspaceId}`).then((r) => r.json()),
-    ]).then(([settingsRes, workspaceRes]) => {
+      fetch(`/api/govern/${workspaceId}`).then((r) => r.json()),
+    ]).then(([settingsRes, workspaceRes, governRes]) => {
       const s = (settingsRes as { settings?: Record<string, unknown> }).settings ?? {};
       const w = (workspaceRes as { workspace?: Record<string, unknown> }).workspace ?? {};
+      const gs = (governRes as { settings?: ApprovalSettingsRow }).settings ?? null;
+      if (gs) setApproval(gs);
       setLocal({
         aiMode: (w.aiMode as string) ?? DEFAULTS.aiMode,
         showToolCalls: (s.showToolCalls as boolean) ?? DEFAULTS.showToolCalls,
@@ -143,7 +148,18 @@ export function SettingsDialog({ workspaceId, workspaceName }: Props) {
       case 'ai-behavior':
         return <AIBehaviorSection settings={local} patch={patch} onUpdate={update} />;
       case 'approval-gates':
-        return <ApprovalGatesSection />;
+        return (
+          <ApprovalGatesSection
+            workspaceId={workspaceId}
+            settings={approval}
+            onUpdate={setApproval}
+            piiHeuristicsEnabled={local.piiHeuristicsEnabled}
+            onPiiToggle={(v) => {
+              update('piiHeuristicsEnabled', v);
+              patch('piiHeuristicsEnabled', v);
+            }}
+          />
+        );
       case 'data-profiling':
         return <DataProfilingSection settings={local} patch={patch} onUpdate={update} />;
       case 'models-sql':

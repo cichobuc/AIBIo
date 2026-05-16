@@ -5,42 +5,40 @@ import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/core/ui/tabs';
 import { Badge } from '@/core/ui/badge';
 import { Button } from '@/core/ui/button';
-import { PermissionsPanel } from '@/modules/ainderstanding/govern/components/PermissionsPanel';
 import { PIIInventoryDashboard } from '@/modules/ainderstanding/govern/components/PIIInventoryDashboard';
 import { ClassifyColumnSheet } from '@/modules/ainderstanding/govern/components/ClassifyColumnSheet';
 import { BulkClassifySheet } from '@/modules/ainderstanding/govern/components/BulkClassifySheet';
 import { AuditLogViewer } from '@/modules/ainderstanding/govern/components/AuditLogViewer';
-import type {
-  SourcePermissionRow,
-  TablePermissionRow,
-  ApprovalSettingsRow,
-} from '@/modules/ainderstanding/govern/components/PermissionsPanel';
 import type { PiiInventoryRow } from '@/modules/ainderstanding/govern/components/PIIInventoryDashboard';
 import type { ClassifyColumnTarget } from '@/modules/ainderstanding/govern/components/ClassifyColumnSheet';
 import type { AuditEntryFull } from '@/modules/ainderstanding/govern/components/AuditEntryDetailSheet';
 
 type SourceRow = { id: string; name: string };
 
+type HighlightTarget = {
+  dataSourceId: string;
+  tableName: string;
+  columnName: string;
+};
+
 type Props = {
   workspaceId: string;
   sources: SourceRow[];
-  permissions: SourcePermissionRow[];
-  tablePermissions: TablePermissionRow[];
-  settings: ApprovalSettingsRow | null;
   audits: AuditEntryFull[];
   piiColumns: PiiInventoryRow[];
   auditFilters?: { agent?: string; action?: string; outcome?: string; q?: string };
+  defaultTab?: string;
+  highlight?: HighlightTarget;
 };
 
 export function GovernPageClient({
   workspaceId,
   sources,
-  permissions,
-  tablePermissions,
-  settings,
   audits,
   piiColumns,
   auditFilters = {},
+  defaultTab,
+  highlight,
 }: Props) {
   const router = useRouter();
   const [classifyTarget, setClassifyTarget] = useState<ClassifyColumnTarget | null>(null);
@@ -60,13 +58,14 @@ export function GovernPageClient({
     });
   };
 
+  const resolvedTab = defaultTab === 'permissions' ? 'pii' : (defaultTab ?? 'pii');
+
   return (
     <>
       <div className="h-full flex flex-col">
-        <Tabs defaultValue="permissions" className="flex flex-col h-full">
+        <Tabs defaultValue={resolvedTab} className="flex flex-col h-full">
           <div className="border-b px-4 pt-3 flex items-center gap-2">
             <TabsList className="h-7">
-              <TabsTrigger value="permissions" className="text-xs">Permissions</TabsTrigger>
               <TabsTrigger value="pii" className="text-xs">
                 PII Inventory
                 {totalPii > 0 && (
@@ -89,16 +88,6 @@ export function GovernPageClient({
             )}
           </div>
 
-          <TabsContent value="permissions" className="flex-1 overflow-auto m-0 p-4">
-            <PermissionsPanel
-              workspaceId={workspaceId}
-              sources={sources}
-              permissions={permissions}
-              tablePermissions={tablePermissions}
-              settings={settings}
-            />
-          </TabsContent>
-
           <TabsContent value="pii" className="flex-1 overflow-auto m-0 p-4">
             <PIIInventoryDashboard
               workspaceId={workspaceId}
@@ -106,6 +95,7 @@ export function GovernPageClient({
               piiColumns={piiColumns}
               onEdit={openClassify}
               onRefresh={() => router.refresh()}
+              highlight={highlight}
             />
           </TabsContent>
 

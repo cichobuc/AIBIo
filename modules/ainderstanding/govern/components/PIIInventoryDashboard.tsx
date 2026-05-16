@@ -30,12 +30,19 @@ export type PiiInventoryRow = {
 
 type SourceRow = { id: string; name: string };
 
+type HighlightTarget = {
+  dataSourceId: string;
+  tableName: string;
+  columnName: string;
+};
+
 type Props = {
   workspaceId: string;
   sources: SourceRow[];
   piiColumns: PiiInventoryRow[];
   onEdit: (row: PiiInventoryRow) => void;
   onRefresh: () => void;
+  highlight?: HighlightTarget;
 };
 
 function downloadCsv(rows: PiiInventoryRow[], sources: SourceRow[]) {
@@ -63,8 +70,8 @@ function downloadCsv(rows: PiiInventoryRow[], sources: SourceRow[]) {
   URL.revokeObjectURL(url);
 }
 
-export function PIIInventoryDashboard({ workspaceId, sources, piiColumns, onEdit, onRefresh }: Props) {
-  const [filterSource, setFilterSource] = useState<string>('all');
+export function PIIInventoryDashboard({ workspaceId, sources, piiColumns, onEdit, onRefresh, highlight }: Props) {
+  const [filterSource, setFilterSource] = useState<string>(highlight?.dataSourceId ?? 'all');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -172,8 +179,12 @@ export function PIIInventoryDashboard({ workspaceId, sources, piiColumns, onEdit
             {filtered.map((row, i) => {
               const src = sources.find((s) => s.id === row.dataSourceId);
               const isReview = row.setBy === 'heuristic';
+              const isHighlighted = highlight &&
+                row.dataSourceId === highlight.dataSourceId &&
+                row.tableName === highlight.tableName &&
+                row.columnName === highlight.columnName;
               return (
-                <tr key={i} className="border-b hover:bg-muted/30 transition-colors">
+                <tr key={i} className={`border-b hover:bg-muted/30 transition-colors${isHighlighted ? ' ring-1 ring-primary ring-inset' : ''}`}>
                   <td className="py-1.5 pr-3 text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap max-w-[112px]">
                     {src?.name ?? row.dataSourceId.slice(0, 8)}
                   </td>

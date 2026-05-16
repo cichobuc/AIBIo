@@ -49,7 +49,7 @@ export function BulkClassifySheet({ workspaceId, open, rows, onClose }: Props) {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const state = states[i]!;
-      await fetch('/api/govern/column-permissions', {
+      await fetch('/api/govern/column-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

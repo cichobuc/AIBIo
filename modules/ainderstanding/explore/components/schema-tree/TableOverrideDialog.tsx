@@ -11,16 +11,8 @@ import {
 import { Button } from '@/core/ui/button';
 import { Input } from '@/core/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/core/ui/select';
+import { TIER_LABELS, TIER_ORDER } from '@/modules/ainderstanding/govern/lib/tier-labels';
 import type { PermissionTierValue } from '@/modules/ainderstanding/govern/db/schema';
-
-const TIER_LABELS: Record<PermissionTierValue, string> = {
-  metadata_only: 'Metadata only',
-  with_reference_samples: '+ Reference samples',
-  with_full_samples: '+ Full samples',
-  with_query_results: '+ Query results',
-};
-
-const TIERS = Object.keys(TIER_LABELS) as PermissionTierValue[];
 
 type Props = {
   open: boolean;
@@ -75,7 +67,7 @@ export function TableOverrideDialog({ open, onClose, onSave, existingTables }: P
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TIERS.map((t) => (
+                {TIER_ORDER.map((t) => (
                   <SelectItem key={t} value={t} className="text-xs">{TIER_LABELS[t]}</SelectItem>
                 ))}
               </SelectContent>
