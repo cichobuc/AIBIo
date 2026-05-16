@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   decision: z.enum(['approved', 'denied']),
+  reason: z.string().optional(),
 });
 
 export async function POST(
@@ -45,7 +46,7 @@ export async function POST(
     );
   }
 
-  resolveApproval(requestId, body.decision);
+  resolveApproval(requestId, body.decision, body.reason);
 
   return NextResponse.json({ resolved: true, requestId });
 }

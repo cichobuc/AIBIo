@@ -101,7 +101,7 @@ export function wasAlreadyResolved(requestId: string): boolean {
   return resolvedIds.has(requestId);
 }
 
-export function resolveApproval(requestId: string, decision: 'approved' | 'denied'): void {
+export function resolveApproval(requestId: string, decision: 'approved' | 'denied', reason?: string): void {
   const gate = pendingGates.get(requestId);
   if (!gate) return;
 
@@ -110,7 +110,7 @@ export function resolveApproval(requestId: string, decision: 'approved' | 'denie
     sessionId: gate.sessionId,
     workspaceId: gate.workspaceId,
     timestamp: new Date().toISOString(),
-    payload: { requestId, decision, gateType: gate.gateType },
+    payload: { requestId, decision, gateType: gate.gateType, ...(reason ? { reason } : {}) },
   });
 
   gate.resolve({ decision, requestId });

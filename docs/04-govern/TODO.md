@@ -1,7 +1,7 @@
 # TODO — Govern (GDPR Control Plane)
 
 > **Phase:** G1 (enforcement layer) → G2 (UI)
-> **Status:** G1 done, G2 not started
+> **Status:** done (G1 + G2)
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §6.3 §8, ../DATABASE_SCHEMA.md §5 (permissions, audit), ../MCP_TOOLS.md §Govern, ../API_CONTRACT.md §approvals §govern, ../AGENT_PROMPTS.md (žiadni vlastní agenti)
 
@@ -132,31 +132,33 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 
 ### 4.6 UI komponenty (`app/workspace/[workspaceId]/govern/`)
 
-- [ ] `page.tsx` — 3 taby: Permissions / PII Inventory / Audit Log
-- [ ] `modules/ainderstanding/govern/components/PermissionsPanel.tsx`:
-  - Per-source permission tier dropdown
-  - Per-table overrides (collapsible)
-  - Approval policy settings (4 policy dropdowns)
-- [ ] `modules/ainderstanding/govern/components/PIIInventoryDashboard.tsx`:
-  - Filter: table / column / pii_type / status (candidate/classified) / layer (1/2/3)
-  - Per-row: Classify button (opens `ClassifyColumnTab`) / Mark as not-PII
-  - Export list button
-- [ ] `modules/ainderstanding/govern/components/ClassifyColumnTab.tsx` — inline classification:
-  - PII classification selector (`none` / `pii` / `sensitive`)
-  - PII subtype radio group
-  - Potvrdiť → POST `/api/govern/column-permissions`
-- [ ] `modules/ainderstanding/govern/components/BulkClassifyTab.tsx` — multi-column výber + hromadné nastavenie
-- [ ] `modules/ainderstanding/govern/components/AuditLogViewer.tsx`:
-  - Chronologický zoznam (newest first)
-  - Filter: agent_name, action_type, outcome, date range
-  - Per-entry detail: session_id, table, columns, outcome badge
+- [x] `page.tsx` — 3 taby: Permissions / PII Inventory / Audit Log (direct Drizzle DB queries)
+- [x] `modules/ainderstanding/govern/components/PermissionsPanel.tsx`:
+  - Per-source permission tier dropdown (auto-save)
+  - Per-table overrides (collapsible, add/remove)
+  - Approval policy settings (5 policy dropdowns incl. timeout)
+- [x] `modules/ainderstanding/govern/components/PIIInventoryDashboard.tsx`:
+  - Filter: source / pii_type / status — client-side
+  - Per-row: Edit button opens ClassifyColumnSheet; CSV export
+- [x] `modules/ainderstanding/govern/components/ClassifyColumnSheet.tsx` — side drawer classification:
+  - GDPR Layer radio group (L1/L2/L3) + PII subtype radios
+  - AI suggestion badge; useEffect syncs state on re-open
+  - Save → POST `/api/govern/column-permissions` with `setBy: 'user'`
+- [x] `modules/ainderstanding/govern/components/BulkClassifySheet.tsx` — per-row select dropdowns + Save all (sequential POST)
+- [x] `modules/ainderstanding/govern/components/PiiTypeRadios.tsx` — shared 9-subtype radio group
+- [x] `modules/ainderstanding/govern/components/PiiLayerChip.tsx` — L1/L2/L3 chip with layer CSS tokens
+- [x] `modules/ainderstanding/govern/components/AuditLogViewer.tsx`:
+  - Chronologický zoznam (newest first); filters push URL search params (server-side)
+  - Filter: agent, action_type, outcome, table search
+  - Per-entry klik → `AuditEntryDetailSheet` (detail_json pretty-print, sql_hash)
   - **Žiadne tlačidlo delete/clear** — read-only UI
-- [ ] `ApprovalDialog.tsx` — global modal (viď 01-shell TODO) — Govern len poskytuje `gateType`-specific payload rendering:
-  - `execute_query`: SQL snippet (syntax highlighted, read-only), estimated row count
-  - `write_model_file`: model name + SQL preview
-  - `write_to_docs`: doc record type + confidence
-  - `write_test_file`: test SQL preview
-  - `share_results_with_ai`: row count + column names (nikdy raw values v dialógu!)
+- [x] `modules/ainderstanding/govern/components/AuditEntryDetailSheet.tsx` — read-only entry detail
+- [x] `ApprovalDialog.tsx` — refactored with gate-type dispatch:
+  - `execute_query` → `ExecuteQueryGate` (L2 bottom banner, collapsible SQL)
+  - `write_to_docs` → `WriteDocsGate` (L2 banner, confidence chip)
+  - `share_results_with_ai` → `ShareResultsGate` (L3 modal, mandatory reason, progress bar)
+  - `write_model_file` / `write_test_file` → `WriteFileGate` (L3 modal, file preview, mandatory reason)
+- [x] `core/ui/progress.tsx` — countdown progress bar (manual impl, no Radix dep)
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 
@@ -165,7 +167,7 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 - [ ] BR-GOV-022: ApprovalDeniedError nie je trigger pre retry v sql-writer
 - [ ] BR-GOV-023: approval je per-request jednorazový (pokiaľ nie je "Approve for session" zvolené)
 - [x] BR-GOV-030: PII masking non-bypassable — aj reference tables, aj po share_results_with_ai approve
-- [ ] BR-GOV-032: `column_permissions` je source of truth pre PII — Explore `column_profiles.pii_candidate` je iba suggestion
+- [x] BR-GOV-032: `column_permissions` je source of truth pre PII — ClassifyColumnSheet ukladá s `setBy: 'user'`
 - [x] BR-GOV-041: audit log je append-only — žiadny UPDATE/DELETE na `audit_entries`, žiadna UI možnosť vypnúť
 - [x] BR-GOV-042: blocked operácie (outcome=denied/timeout) musia byť zaauditované
 - [x] BR-GOV-050: result handle TTL 5 min (300s), in-memory iba
@@ -178,7 +180,7 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 - [ ] **Layer 3 approval flow:** sql-writer zavolá `guarded_run_select_query` → SSE `approval_required` → ApprovalDialog → Approve → tool pokračuje, vráti `{ rowCount, resultHandle }` → `guarded_share_results` potrebuje druhý approval → po approve agent dostane rows
 - [ ] **PII masking:** stĺpec `email` klasifikovaný ako PII → reference table sample zobrazuje `[EMAIL_MASKED]` namiesto hodnôt
 - [ ] **Result cache expiry:** po 300s `getResult(resultHandle)` vráti null, agent dostane `RESULT_EXPIRED` error
-- [ ] **Audit log:** každá operácia (aj DENIED) sa objaví v AuditLogViewer; žiadna UI možnosť zmazať
+- [x] **Audit log:** každá operácia (aj DENIED) sa objaví v AuditLogViewer; žiadna UI možnosť zmazať
 - [ ] **ESLint rule:** pokus o priamy import Connect adaptéra z explore/ → ESLint error pri `npm run lint`
 - [ ] Integration tests: `npx vitest run modules/ainderstanding/govern/__tests__/`
 

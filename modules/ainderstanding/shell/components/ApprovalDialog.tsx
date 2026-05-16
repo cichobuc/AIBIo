@@ -1,24 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Lock, Timer } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-  Button,
-  cn,
-} from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
+import { ExecuteQueryGate } from './approval/ExecuteQueryGate';
+import { ShareResultsGate } from './approval/ShareResultsGate';
+import { WriteFileGate } from './approval/WriteFileGate';
+import { WriteDocsGate } from './approval/WriteDocsGate';
 
-const FULL_MODAL_GATES = new Set(['share_results_with_ai', 'write_model_file', 'write_test_file']);
-
-function useCountdown(timeoutAt: string | undefined) {
+function useCountdown(timeoutAt: string | undefined): { display: string; remaining: number } {
   const [remaining, setRemaining] = useState(300);
 
   useEffect(() => {
@@ -34,96 +23,100 @@ function useCountdown(timeoutAt: string | undefined) {
 
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
+  return { display: `${mins}:${secs.toString().padStart(2, '0')}`, remaining };
 }
 
-async function resolveApproval(requestId: string, decision: 'approved' | 'denied') {
+async function resolveApproval(requestId: string, decision: 'approved' | 'denied', reason?: string) {
   await fetch(`/api/approvals/${requestId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({ decision, ...(reason ? { reason } : {}) }),
   });
 }
 
 export function ApprovalDialog() {
   const pendingApproval = useWorkspaceStore((s) => s.pendingApproval);
   const setPendingApproval = useWorkspaceStore((s) => s.setPendingApproval);
-  const countdown = useCountdown(pendingApproval?.timeoutAt);
+  const { display: countdown, remaining } = useCountdown(pendingApproval?.timeoutAt);
 
   if (!pendingApproval) return null;
 
-  const isFullModal = FULL_MODAL_GATES.has(pendingApproval.gateType);
-
-  async function handle(decision: 'approved' | 'denied') {
-    await resolveApproval(pendingApproval!.requestId, decision);
+  const approve = async (reason?: string) => {
+    await resolveApproval(pendingApproval.requestId, 'approved', reason);
     setPendingApproval(null);
-  }
+  };
 
-  if (isFullModal) {
+  const deny = async () => {
+    await resolveApproval(pendingApproval.requestId, 'denied');
+    setPendingApproval(null);
+  };
+
+  const { gateType, agentName, details } = pendingApproval;
+
+  if (gateType === 'execute_query') {
+    const d = details as { sql: string; dataSourceName: string };
     return (
-      <AlertDialog open>
-        <AlertDialogContent className="max-w-xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-layer-3" />
-              <span>Approval Required</span>
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-body">
-              <span className="font-mono text-accent-ai">{pendingApproval.agentName}</span>{' '}
-              {pendingApproval.description}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          {'sql' in pendingApproval.details && (
-            <div className="rounded border border-border bg-secondary p-3 font-mono text-caption overflow-auto max-h-40">
-              <pre className="whitespace-pre-wrap">{(pendingApproval.details as { sql: string }).sql}</pre>
-            </div>
-          )}
-
-          <div className="flex items-center gap-1.5 text-caption text-layer-2">
-            <Timer className="h-3 w-3" />
-            <span>Timeout in {countdown}</span>
-          </div>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => void handle('denied')}>Deny</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handle('approved')}>Approve</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <div className="fixed bottom-[54px] left-0 right-0 z-40">
+        <ExecuteQueryGate
+          agentName={agentName}
+          sql={d.sql}
+          dataSourceName={d.dataSourceName}
+          countdown={countdown}
+          onApprove={() => void approve()}
+          onDeny={() => void deny()}
+        />
+      </div>
     );
   }
 
-  // Level 2: Bottom Banner
-  return (
-    <div className="fixed bottom-[54px] left-0 right-0 z-40 border-t border-layer-2/50 bg-layer-2/10 px-4 py-2.5">
-      <div className="flex items-center gap-3">
-        <AlertTriangle className="h-4 w-4 text-layer-2 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <span className="text-body text-foreground">
-            <span className="font-mono text-accent-ai">{pendingApproval.agentName}</span>
-            {' — '}{pendingApproval.description}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-caption text-layer-2">Timeout: {countdown}</span>
-          <Button
-            size="sm"
-            className="h-7 text-caption bg-layer-1/20 text-layer-1 border border-layer-1/50 hover:bg-layer-1/30"
-            onClick={() => void handle('approved')}
-          >
-            Execute
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-caption text-muted-foreground hover:text-foreground"
-            onClick={() => void handle('denied')}
-          >
-            Deny
-          </Button>
-        </div>
+  if (gateType === 'write_to_docs') {
+    const d = details as { recordType: string; name: string; description: string };
+    return (
+      <div className="fixed bottom-[54px] left-0 right-0 z-40">
+        <WriteDocsGate
+          agentName={agentName}
+          recordType={d.recordType ?? 'doc'}
+          name={d.name ?? ''}
+          description={d.description ?? ''}
+          countdown={countdown}
+          onApprove={() => void approve()}
+          onDeny={() => void deny()}
+        />
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (gateType === 'share_results_with_ai') {
+    const d = details as { rowCount: number; columns: string[]; queryPreview: string };
+    return (
+      <ShareResultsGate
+        agentName={agentName}
+        rowCount={d.rowCount}
+        columns={d.columns}
+        queryPreview={d.queryPreview}
+        countdown={countdown}
+        remainingSec={remaining}
+        onApprove={(reason) => void approve(reason)}
+        onDeny={() => void deny()}
+      />
+    );
+  }
+
+  if (gateType === 'write_model_file' || gateType === 'write_test_file') {
+    type WMPayload = { modelName: string; layer: string; sqlDiff: string };
+    type WTPayload = { testType: 'generic' | 'custom'; modelName: string; testPreview: string };
+    return (
+      <WriteFileGate
+        agentName={agentName}
+        gateType={gateType}
+        payload={details as WMPayload | WTPayload}
+        countdown={countdown}
+        remainingSec={remaining}
+        onApprove={(reason) => void approve(reason)}
+        onDeny={() => void deny()}
+      />
+    );
+  }
+
+  return null;
 }
