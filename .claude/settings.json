@@ -30,7 +30,8 @@
       "ToolSearch",
       "Write",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "mcp__playwright__browser_snapshot"
     ],
     "deny": [
       "Bash(rm -rf /)",
