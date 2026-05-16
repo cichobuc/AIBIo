@@ -67,8 +67,35 @@ export type SchemaTable = {
   comment?: string;
 };
 
+export type SchemaView = {
+  name: string;
+  schema?: string;
+  definitionPreview?: string;
+  columns: SchemaColumn[];
+};
+
+export type SchemaRoutine = {
+  name: string;
+  schema?: string;
+  kind: 'function' | 'procedure';
+  returnType?: string;
+};
+
+export type SchemaIndex = {
+  name: string;
+  schema?: string;
+  tableName: string;
+  columns: string[];
+  isUnique: boolean;
+  isPrimary: boolean;
+};
+
 export type SchemaSnapshot = {
   tables: SchemaTable[];
+  views?: SchemaView[];
+  routines?: SchemaRoutine[];
+  indexes?: SchemaIndex[];
+  schemas?: string[];
   capturedAt: string;
 };
 

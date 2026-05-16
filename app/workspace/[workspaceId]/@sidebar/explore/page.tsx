@@ -21,17 +21,14 @@ export default async function ExploreSidebarPage({
   return (
     <Suspense>
       <ExploreSidebar
+        workspaceId={workspaceId}
         sources={data.sources}
         snapshots={data.snapshots.map((s) => ({
           dataSourceId: s.dataSourceId,
           snapshotJson: s.snapshotJson,
         }))}
-        tables={data.tables.map((t) => ({
-          dataSourceId: t.dataSourceId,
-          tableName: t.tableName,
-          rowCount: t.rowCount,
-          isReferenceTable: t.isReferenceTable,
-        }))}
+        tables={data.tables}
+        columns={data.columns}
       />
     </Suspense>
   );

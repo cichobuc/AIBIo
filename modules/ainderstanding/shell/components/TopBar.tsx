@@ -8,7 +8,6 @@ import { ModeSelector } from './ModeSelector';
 import { useWorkspaceStore } from '../store/workspace-store';
 
 const MODULE_LABELS: Record<string, string> = {
-  connect: 'Connect',
   explore: 'Explore',
   govern: 'Govern',
   model: 'Model',
@@ -33,7 +32,7 @@ export function TopBar({ workspaceId }: { workspaceId: string }) {
           <span className="text-accent-ai font-bold shrink-0">◈</span>
           <span className="text-muted-foreground/50">/</span>
           <Link
-            href={`/workspace/${workspaceId}/connect`}
+            href={`/workspace/${workspaceId}/explore`}
             className="truncate hover:text-foreground transition-colors max-w-[160px]"
           >
             {workspaceId}

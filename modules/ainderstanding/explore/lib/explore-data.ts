@@ -6,7 +6,12 @@ export type ExploreSnapshot = typeof schemaSnapshots.$inferSelect;
 export type ExploreTableProfile = typeof tableProfiles.$inferSelect;
 export type ExploreColumnProfile = typeof columnProfiles.$inferSelect;
 export type ExploreSchemaChange = typeof schemaChanges.$inferSelect;
-export type ExploreSource = { id: string; name: string };
+export type ExploreSource = {
+  id: string;
+  name: string;
+  dbType: string;
+  status: string;
+};
 
 export type ExploreData = {
   sources: ExploreSource[];
@@ -18,7 +23,7 @@ export type ExploreData = {
 
 export function getExploreData(workspaceId: string): ExploreData {
   const sources = db
-    .select({ id: dataSources.id, name: dataSources.name })
+    .select({ id: dataSources.id, name: dataSources.name, dbType: dataSources.dbType, status: dataSources.status })
     .from(dataSources)
     .where(eq(dataSources.workspaceId, workspaceId))
     .all();

@@ -5,6 +5,9 @@ import type {
   SchemaSnapshot,
   SchemaTable,
   SchemaColumn,
+  SchemaView,
+  SchemaRoutine,
+  SchemaIndex,
   NativeComment,
   QueryResult,
   FormCredentials,
@@ -79,37 +82,58 @@ export class PostgresAdapter implements SourceAdapter {
   async introspectSchema(): Promise<SchemaSnapshot> {
     const client = await this.pool.connect();
     try {
-      const tablesRes = await client.query<{ table_schema: string; table_name: string }>(
-        `SELECT table_schema, table_name
-         FROM information_schema.tables
-         WHERE table_schema NOT IN ('pg_catalog','information_schema')
-           AND table_type = 'BASE TABLE'
-         ORDER BY table_schema, table_name`,
-      );
-
-      const columnsRes = await client.query<{
-        table_schema: string;
-        table_name: string;
-        column_name: string;
-        data_type: string;
-        is_nullable: string;
-      }>(
-        `SELECT table_schema, table_name, column_name, data_type, is_nullable
-         FROM information_schema.columns
-         WHERE table_schema NOT IN ('pg_catalog','information_schema')
-         ORDER BY table_schema, table_name, ordinal_position`,
-      );
-
-      const pkRes = await client.query<{ table_schema: string; table_name: string; column_name: string }>(
-        `SELECT tc.table_schema, tc.table_name, kcu.column_name
-         FROM information_schema.table_constraints tc
-         JOIN information_schema.key_column_usage kcu
-           ON tc.constraint_name = kcu.constraint_name
-          AND tc.table_schema = kcu.table_schema
-         WHERE tc.constraint_type = 'PRIMARY KEY'`,
-      );
+      const [tablesRes, columnsRes, pkRes, fkRes, viewsRes, routinesRes, indexesRes] = await Promise.all([
+        client.query<{ table_schema: string; table_name: string }>(
+          `SELECT table_schema, table_name
+           FROM information_schema.tables
+           WHERE table_schema NOT IN ('pg_catalog','information_schema')
+             AND table_type = 'BASE TABLE'
+           ORDER BY table_schema, table_name`,
+        ),
+        client.query<{ table_schema: string; table_name: string; column_name: string; data_type: string; is_nullable: string }>(
+          `SELECT table_schema, table_name, column_name, data_type, is_nullable
+           FROM information_schema.columns
+           WHERE table_schema NOT IN ('pg_catalog','information_schema')
+           ORDER BY table_schema, table_name, ordinal_position`,
+        ),
+        client.query<{ table_schema: string; table_name: string; column_name: string }>(
+          `SELECT tc.table_schema, tc.table_name, kcu.column_name
+           FROM information_schema.table_constraints tc
+           JOIN information_schema.key_column_usage kcu
+             ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+           WHERE tc.constraint_type = 'PRIMARY KEY'`,
+        ),
+        client.query<{ table_schema: string; table_name: string; column_name: string }>(
+          `SELECT tc.table_schema, tc.table_name, kcu.column_name
+           FROM information_schema.table_constraints tc
+           JOIN information_schema.key_column_usage kcu
+             ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+           WHERE tc.constraint_type = 'FOREIGN KEY'`,
+        ),
+        client.query<{ table_schema: string; table_name: string; view_definition: string }>(
+          `SELECT table_schema, table_name, LEFT(view_definition, 200) AS view_definition
+           FROM information_schema.views
+           WHERE table_schema NOT IN ('pg_catalog','information_schema')
+           ORDER BY table_schema, table_name`,
+        ),
+        client.query<{ routine_schema: string; routine_name: string; routine_type: string; data_type: string }>(
+          `SELECT routine_schema, routine_name, routine_type, data_type
+           FROM information_schema.routines
+           WHERE routine_schema NOT IN ('pg_catalog','information_schema')
+           ORDER BY routine_schema, routine_name`,
+        ),
+        client.query<{ schemaname: string; tablename: string; indexname: string; indexdef: string }>(
+          `SELECT schemaname, tablename, indexname, indexdef
+           FROM pg_indexes
+           WHERE schemaname NOT IN ('pg_catalog','information_schema')
+           ORDER BY schemaname, tablename, indexname`,
+        ),
+      ]);
 
       const pkSet = new Set(pkRes.rows.map((r) => `${r.table_schema}.${r.table_name}.${r.column_name}`));
+      const fkSet = new Set(fkRes.rows.map((r) => `${r.table_schema}.${r.table_name}.${r.column_name}`));
 
       const colsByTable = new Map<string, SchemaColumn[]>();
       for (const col of columnsRes.rows) {
@@ -120,7 +144,7 @@ export class PostgresAdapter implements SourceAdapter {
           dataType: col.data_type,
           nullable: col.is_nullable === 'YES',
           isPrimaryKey: pkSet.has(`${col.table_schema}.${col.table_name}.${col.column_name}`),
-          isForeignKey: false,
+          isForeignKey: fkSet.has(`${col.table_schema}.${col.table_name}.${col.column_name}`),
         });
       }
 
@@ -130,7 +154,34 @@ export class PostgresAdapter implements SourceAdapter {
         columns: colsByTable.get(`${t.table_schema}.${t.table_name}`) ?? [],
       }));
 
-      return { tables, capturedAt: new Date().toISOString() };
+      const views: SchemaView[] = viewsRes.rows.map((v) => ({
+        name: v.table_name,
+        schema: v.table_schema,
+        definitionPreview: v.view_definition,
+        columns: colsByTable.get(`${v.table_schema}.${v.table_name}`) ?? [],
+      }));
+
+      const routines: SchemaRoutine[] = routinesRes.rows.map((r) => ({
+        name: r.routine_name,
+        schema: r.routine_schema,
+        kind: (r.routine_type === 'PROCEDURE' ? 'procedure' : 'function') as 'function' | 'procedure',
+        returnType: r.data_type || undefined,
+      }));
+
+      const indexes: SchemaIndex[] = indexesRes.rows.map((i) => {
+        const isUnique = i.indexdef.includes('UNIQUE');
+        const isPrimary = i.indexname.endsWith('_pkey');
+        const colMatch = i.indexdef.match(/\(([^)]+)\)/);
+        const columns = colMatch?.[1] ? colMatch[1].split(',').map((c) => c.trim()) : [];
+        return { name: i.indexname, schema: i.schemaname, tableName: i.tablename, columns, isUnique, isPrimary };
+      });
+
+      const schemas = [...new Set([
+        ...tablesRes.rows.map((t) => t.table_schema),
+        ...viewsRes.rows.map((v) => v.table_schema),
+      ])].sort();
+
+      return { tables, views, routines, indexes, schemas, capturedAt: new Date().toISOString() };
     } finally {
       client.release();
     }

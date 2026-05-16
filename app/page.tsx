@@ -18,7 +18,7 @@ export default function HomePage() {
 
         <div className="mt-4">
           <Link
-            href="/workspace/demo/connect"
+            href="/workspace/demo/explore"
             className="block w-full text-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-body font-medium hover:opacity-90 transition-opacity"
           >
             Create workspace

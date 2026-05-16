@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { useRouter } from 'next/navigation';
 
-const MODULE_ORDER = ['connect', 'explore', 'govern', 'model', 'document', 'test', 'export'];
+const MODULE_ORDER = ['explore', 'govern', 'model', 'document', 'test', 'export'];
 
 export function useKeyboardShortcuts(workspaceId: string) {
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar);
@@ -40,10 +40,10 @@ export function useKeyboardShortcuts(workspaceId: string) {
         return;
       }
 
-      // ⌘1–⌘7 module navigation
+      // ⌘1–⌘6 module navigation
       if (meta && !shift) {
         const idx = parseInt(e.key, 10);
-        if (idx >= 1 && idx <= 7) {
+        if (idx >= 1 && idx <= 6) {
           const mod = MODULE_ORDER[idx - 1];
           if (mod) {
             e.preventDefault();

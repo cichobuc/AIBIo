@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Database,
-  Compass,
   Shield,
   Layers,
   FileText,
@@ -17,8 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@/
 import { useWorkspaceStore } from '../store/workspace-store';
 
 const MODULES = [
-  { key: 'connect', icon: Database, label: 'Connect', tip: 'Manage data sources' },
-  { key: 'explore', icon: Compass, label: 'Explore', tip: 'Schema & profiling' },
+  { key: 'explore', icon: Database, label: 'Explore', tip: 'Schema & connections' },
   { key: 'govern', icon: Shield, label: 'Govern', tip: 'GDPR & permissions' },
   { key: 'model', icon: Layers, label: 'Model', tip: 'Dimensional model' },
   { key: 'document', icon: FileText, label: 'Document', tip: 'Governance docs' },

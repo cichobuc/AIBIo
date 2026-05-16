@@ -15,13 +15,12 @@ import {
 } from '@/core/ui';
 
 const MODULES = [
-  { key: 'connect', label: 'Go to Connect', shortcut: '⌘1' },
-  { key: 'explore', label: 'Go to Explore', shortcut: '⌘2' },
-  { key: 'govern', label: 'Go to Govern', shortcut: '⌘3' },
-  { key: 'model', label: 'Go to Model', shortcut: '⌘4' },
-  { key: 'document', label: 'Go to Document', shortcut: '⌘5' },
-  { key: 'test', label: 'Go to Test', shortcut: '⌘6' },
-  { key: 'export', label: 'Go to Export', shortcut: '⌘7' },
+  { key: 'explore', label: 'Go to Explore', shortcut: '⌘1' },
+  { key: 'govern', label: 'Go to Govern', shortcut: '⌘2' },
+  { key: 'model', label: 'Go to Model', shortcut: '⌘3' },
+  { key: 'document', label: 'Go to Document', shortcut: '⌘4' },
+  { key: 'test', label: 'Go to Test', shortcut: '⌘5' },
+  { key: 'export', label: 'Go to Export', shortcut: '⌘6' },
 ];
 
 const AI_COMMANDS = [
