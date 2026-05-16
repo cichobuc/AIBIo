@@ -22,7 +22,7 @@ type AgentMessageEvent = BaseSSEEvent & {
     content: string;
     isPartial: boolean;
     messageId: string;
-    role: 'assistant';
+    role: 'user' | 'assistant';
   };
 };
 

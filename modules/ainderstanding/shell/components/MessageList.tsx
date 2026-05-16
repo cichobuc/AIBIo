@@ -1,14 +1,25 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { ScrollArea } from '@/core/ui';
 import { AgentBadge } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { ToolCallChip } from './ToolCallChip';
 import { ApprovalRequiredCard } from './ApprovalRequiredCard';
+import { ThinkingLog } from './ThinkingLog';
 import type { SSEEvent } from '@/core/orchestration/streaming';
 
-type ToolResult = { success: boolean; summary: string };
+function UserMessage({ event }: { event: Extract<SSEEvent, { type: 'agent_message' }> }) {
+  if (!event.payload.content.trim()) return null;
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className="text-caption text-muted-foreground">You</span>
+      <div className="rounded-lg bg-accent-ai/15 px-3 py-2 text-body text-foreground max-w-[85%]">
+        <span className="whitespace-pre-wrap">{event.payload.content}</span>
+      </div>
+    </div>
+  );
+}
 
 function AgentMessage({ event }: { event: Extract<SSEEvent, { type: 'agent_message' }> }) {
   if (!event.payload.content.trim()) return null;
@@ -35,51 +46,38 @@ export function MessageList({ workspaceId, onApproval }: {
 }) {
   const messages = useWorkspaceStore((s) => s.messages);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const toolResults = useRef<Map<string, ToolResult>>(new Map());
+
+  const thinkingEvents = useMemo(
+    () => messages.filter(
+      (m): m is Extract<SSEEvent, { type: 'agent_thinking' | 'tool_call' | 'tool_result' }> =>
+        m.type === 'agent_thinking' || m.type === 'tool_call' || m.type === 'tool_result',
+    ),
+    [messages],
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  // Collect tool results for matching with tool calls
-  messages.forEach((msg) => {
-    if (msg.type === 'tool_result') {
-      toolResults.current.set(msg.payload.toolCallId, {
-        success: msg.payload.success,
-        summary: msg.payload.summary,
-      });
-    }
-  });
-
   return (
     <ScrollArea className="flex-1 px-3 py-2">
       <div className="space-y-3">
+        <ThinkingLog events={thinkingEvents} />
         {messages.map((event, i) => {
           switch (event.type) {
             case 'agent_thinking':
-              return (
-                <div key={i} className="flex items-center gap-1.5 text-caption text-muted-foreground">
-                  <span className="animate-spin">⟳</span>
-                  <AgentBadge name={event.payload.agentName} className="text-caption" />
-                  <span>{event.payload.message}</span>
-                </div>
-              );
+              return null;
 
             case 'agent_message':
-              return <AgentMessage key={`${i}-${event.payload.messageId}`} event={event} />;
+              return event.payload.role === 'user'
+                ? <UserMessage key={`${i}-${event.payload.messageId}`} event={event} />
+                : <AgentMessage key={`${i}-${event.payload.messageId}`} event={event} />;
 
             case 'tool_call':
-              return (
-                <ToolCallChip
-                  key={i}
-                  toolName={event.payload.toolName}
-                  toolCallId={event.payload.toolCallId}
-                  result={toolResults.current.get(event.payload.toolCallId)}
-                />
-              );
+              return null;
 
             case 'tool_result':
-              return null; // rendered via ToolCallChip
+              return null;
 
             case 'approval_required':
               return (
@@ -93,7 +91,7 @@ export function MessageList({ workspaceId, onApproval }: {
               );
 
             case 'approval_resolved':
-              return null; // handled in store
+              return null;
 
             case 'stream_end':
               return (

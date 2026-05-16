@@ -13,6 +13,8 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
   const aiMode = useWorkspaceStore((s) => s.aiMode);
   const pendingApproval = useWorkspaceStore((s) => s.pendingApproval);
   const setSession = useWorkspaceStore((s) => s.setSession);
+  const sessionId = useWorkspaceStore((s) => s.sessionId);
+  const addMessage = useWorkspaceStore((s) => s.addMessage);
 
   const isDisabled = aiMode === 'manual' || pendingApproval !== null || sending;
   const placeholder =
@@ -33,6 +35,20 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
     const trimmed = value.trim();
     if (!trimmed || isDisabled) return;
 
+    addMessage({
+      type: 'agent_message',
+      workspaceId,
+      sessionId: sessionId ?? 'pending',
+      timestamp: new Date().toISOString(),
+      payload: {
+        agentName: 'You',
+        content: trimmed,
+        isPartial: false,
+        messageId: crypto.randomUUID(),
+        role: 'user',
+      },
+    });
+
     setSending(true);
     try {
       const res = await fetch(`/api/chat/${workspaceId}`, {
@@ -52,7 +68,7 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void submit();
     }
@@ -82,12 +98,12 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
           onClick={() => void submit()}
           disabled={isDisabled || !value.trim()}
           className="h-9 w-9 shrink-0 bg-accent-ai hover:bg-accent-ai/90 text-white"
-          aria-label="Send message (⌘↵)"
+          aria-label="Send message (Enter)"
         >
           <SendHorizontal className="h-4 w-4" />
         </Button>
       </div>
-      <p className="mt-1 text-right text-caption text-muted-foreground/50">⌘↵ to send</p>
+      <p className="mt-1 text-right text-caption text-muted-foreground/50">Enter to send · Shift+Enter newline</p>
     </div>
   );
 }

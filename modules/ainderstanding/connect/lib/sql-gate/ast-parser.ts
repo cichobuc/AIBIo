@@ -47,8 +47,9 @@ export function astValidate(sql: string): void {
       });
     }
 
-    // Reject SELECT ... INTO (window variable assignment)
-    const hasInto = (stmt as { into?: unknown }).into;
+    // Reject SELECT ... INTO (node-sql-parser returns into:{position:null} for plain SELECTs; only reject when position is non-null, indicating a real SELECT INTO)
+    const into = (stmt as { into?: { position?: unknown } | null }).into;
+    const hasInto = into != null && into.position != null;
     if (hasInto) {
       throw new SqlRejectedErr({
         code: 'SQL_REJECTED',

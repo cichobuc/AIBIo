@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { ColumnProfileDetailTab } from '@/modules/ainderstanding/explore/components/ColumnProfileDetailTab';
 import { SchemaDiffViewer } from '@/modules/ainderstanding/explore/components/SchemaDiffViewer';
 import { PIICandidatesPanel } from '@/modules/ainderstanding/explore/components/PIICandidatesPanel';
+import { TableDetailTab } from '@/modules/ainderstanding/explore/components/TableDetailTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/core/ui/tabs';
 import { Badge } from '@/core/ui/badge';
 type TableProfile = {
@@ -107,7 +108,7 @@ export function ExplorePageClient({ workspaceId, tables, columns, recentChanges 
             Select a table to inspect
           </div>
         ) : (
-          <Tabs defaultValue="columns" className="flex flex-col h-full">
+          <Tabs defaultValue="data" className="flex flex-col h-full">
             <div className="border-b px-4 pt-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-sm font-medium">{selectedTable.tableName}</span>
@@ -121,6 +122,9 @@ export function ExplorePageClient({ workspaceId, tables, columns, recentChanges 
                 )}
               </div>
               <TabsList className="h-7">
+                <TabsTrigger value="data" className="text-xs">
+                  Data
+                </TabsTrigger>
                 <TabsTrigger value="columns" className="text-xs">
                   Columns {selectedColumns.length > 0 && `(${selectedColumns.length})`}
                 </TabsTrigger>
@@ -136,6 +140,14 @@ export function ExplorePageClient({ workspaceId, tables, columns, recentChanges 
                 </TabsTrigger>
               </TabsList>
             </div>
+
+            <TabsContent value="data" className="flex-1 overflow-auto m-0">
+              <TableDetailTab
+                workspaceId={workspaceId}
+                sourceId={selectedTable.sourceId}
+                tableName={selectedTable.tableName}
+              />
+            </TabsContent>
 
             <TabsContent value="columns" className="flex-1 overflow-auto m-0">
               {selectedColumns.length === 0 ? (
