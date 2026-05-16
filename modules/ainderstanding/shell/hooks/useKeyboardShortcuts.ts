@@ -29,7 +29,7 @@ export function useKeyboardShortcuts(workspaceId: string) {
         toggleSidebar();
         return;
       }
-      if (meta && shift && e.key === 'A') {
+      if (meta && !shift && e.key === '\\') {
         e.preventDefault();
         toggleChatPanel();
         return;

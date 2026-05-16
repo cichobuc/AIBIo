@@ -38,7 +38,7 @@ export function GlobalChatPanel({ workspaceId }: { workspaceId: string }) {
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={toggleChat}
-          aria-label="Collapse AI panel (⌘⇧A)"
+          aria-label="Collapse AI panel (⌘\)"
         >
           <PanelRightClose className="h-4 w-4" />
         </Button>
