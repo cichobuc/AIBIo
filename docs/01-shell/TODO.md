@@ -90,7 +90,7 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 - [x] `StatusBar.tsx` — mode colored dot, active agent + spinner, workspace name, ⌘K hint
 - [x] `BottomPanel.tsx` — toggle (⌘J), Tabs: output/sql/results/approvals
 - [x] `CommandPalette.tsx` — ⌘K dialog, Navigation/AI/Actions sekcie
-- [x] `PrimarySidebar.tsx` — stub (čaká na sub-modul view implementáciu)
+- [x] `PrimarySidebar.tsx` — per-modul navigátor cez Next.js parallel routes (`@sidebar` slot); Connect: SourcesSidebar (sources tree, status dots, table counts, Test connection); Explore: SchemaExplorer; ostatné moduly: placeholder
 - [x] `ActiveAgentsBadge.tsx`, `ContextBar.tsx`, `ChatInput.tsx`, `ToolCallChip.tsx`, `ApprovalRequiredCard.tsx`
 
 ### 4.5 Hooks (`modules/ainderstanding/shell/hooks/`)

@@ -18,9 +18,11 @@ import { SettingsDialog } from './settings/SettingsDialog';
 export function WorkspaceLayout({
   workspaceId,
   children,
+  sidebar,
 }: {
   workspaceId: string;
   children: React.ReactNode;
+  sidebar?: React.ReactNode;
 }) {
   const init = useWorkspaceStore((s) => s.init);
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen);
@@ -68,7 +70,7 @@ export function WorkspaceLayout({
                   {sidebarOpen && (
                     <>
                       <ResizablePanel id="sidebar" defaultSize={hPx.sidebar} minSize={180}>
-                        <PrimarySidebar />
+                        <PrimarySidebar>{sidebar}</PrimarySidebar>
                       </ResizablePanel>
                       <ResizableHandle withHandle />
                     </>

@@ -1,19 +1,10 @@
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
+import { db } from '@/core/db/client';
+import { workspaces } from '@/core/db/schema';
+import { eq } from 'drizzle-orm';
+import { getExploreData } from '@/modules/ainderstanding/explore/lib/explore-data';
 import { ExplorePageClient } from './ExplorePageClient';
-
-const BASE = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-
-async function fetchExploreData(workspaceId: string) {
-  const res = await fetch(`${BASE}/api/explore/${workspaceId}`, { cache: 'no-store' });
-  if (!res.ok) return null;
-  return res.json() as Promise<{
-    sources: { id: string; name: string }[];
-    snapshots: unknown[];
-    tables: unknown[];
-    columns: unknown[];
-    recentChanges: unknown[];
-  }>;
-}
 
 export default async function ExplorePage({
   params,
@@ -21,18 +12,20 @@ export default async function ExplorePage({
   params: Promise<{ workspaceId: string }>;
 }) {
   const { workspaceId } = await params;
-  const data = await fetchExploreData(workspaceId);
 
-  if (!data) notFound();
+  const ws = db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, workspaceId)).get();
+  if (!ws) notFound();
+
+  const data = getExploreData(workspaceId);
 
   return (
-    <ExplorePageClient
-      workspaceId={workspaceId}
-      sources={data.sources}
-      snapshots={data.snapshots as never}
-      tables={data.tables as never}
-      columns={data.columns as never}
-      recentChanges={data.recentChanges as never}
-    />
+    <Suspense>
+      <ExplorePageClient
+        workspaceId={workspaceId}
+        tables={data.tables}
+        columns={data.columns}
+        recentChanges={data.recentChanges}
+      />
+    </Suspense>
   );
 }

@@ -1,14 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { SchemaExplorer } from '@/modules/ainderstanding/explore/components/SchemaExplorer';
+import { useSearchParams } from 'next/navigation';
 import { ColumnProfileDetailTab } from '@/modules/ainderstanding/explore/components/ColumnProfileDetailTab';
 import { SchemaDiffViewer } from '@/modules/ainderstanding/explore/components/SchemaDiffViewer';
 import { PIICandidatesPanel } from '@/modules/ainderstanding/explore/components/PIICandidatesPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/core/ui/tabs';
 import { Badge } from '@/core/ui/badge';
-import type { SchemaSnapshot } from '@/core/types/workspace';
-
 type TableProfile = {
   id: string;
   dataSourceId: string;
@@ -45,21 +42,8 @@ type SchemaChange = {
   detectedAt: string;
 };
 
-type SnapshotRow = {
-  id: string;
-  dataSourceId: string;
-  snapshotJson: string;
-  tableCount: number;
-  columnCount: number;
-  takenAt: string;
-};
-
-type SourceRow = { id: string; name: string };
-
 type Props = {
   workspaceId: string;
-  sources: SourceRow[];
-  snapshots: SnapshotRow[];
   tables: TableProfile[];
   columns: ColumnProfile[];
   recentChanges: SchemaChange[];
@@ -67,34 +51,16 @@ type Props = {
 
 type SelectedTable = { sourceId: string; tableName: string };
 
-export function ExplorePageClient({
-  workspaceId,
-  sources,
-  snapshots,
-  tables,
-  columns,
-  recentChanges,
-}: Props) {
-  const [selectedTable, setSelectedTable] = useState<SelectedTable | undefined>();
+export function ExplorePageClient({ workspaceId, tables, columns, recentChanges }: Props) {
+  const sp = useSearchParams();
+  const selectedTable: SelectedTable | undefined =
+    sp.get('source') && sp.get('table')
+      ? { sourceId: sp.get('source')!, tableName: sp.get('table')! }
+      : undefined;
 
-  const snapshotMap = new Map(snapshots.map((s) => [s.dataSourceId, s]));
   const tableProfileMap = new Map(
     tables.map((t) => [`${t.dataSourceId}:${t.tableName}`, t]),
   );
-
-  const explorerSources = sources.map((source) => {
-    const snapshot = snapshotMap.get(source.id);
-    const parsed: SchemaSnapshot = snapshot
-      ? (JSON.parse(snapshot.snapshotJson) as SchemaSnapshot)
-      : { tables: [], capturedAt: '' };
-
-    const profileMap = new Map<string, TableProfile>();
-    for (const t of tables.filter((t) => t.dataSourceId === source.id)) {
-      profileMap.set(t.tableName, t);
-    }
-
-    return { id: source.id, name: source.name, tables: parsed.tables, profiles: profileMap };
-  });
 
   const selectedProfile = selectedTable
     ? tableProfileMap.get(`${selectedTable.sourceId}:${selectedTable.tableName}`)
@@ -118,7 +84,6 @@ export function ExplorePageClient({
     }));
 
   const handleConfirmPii = async (candidate: (typeof piiCandidates)[0]) => {
-    if (!sources.some((s) => s.id === candidate.dataSourceId)) return;
     await fetch(`/api/govern/column-permissions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -136,17 +101,8 @@ export function ExplorePageClient({
   const handleDismiss = (_candidate: (typeof piiCandidates)[0]) => {};
 
   return (
-    <div className="flex h-full gap-0">
-      <div className="w-60 shrink-0 border-r flex flex-col">
-        <SchemaExplorer
-          sources={explorerSources}
-          onSelectTable={(sourceId, tableName) => setSelectedTable({ sourceId, tableName })}
-          selectedTable={selectedTable}
-        />
-      </div>
-
-      <div className="flex-1 flex flex-col min-w-0">
-        {!selectedTable ? (
+    <div className="flex h-full flex-col min-w-0">
+      {!selectedTable ? (
           <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
             Select a table to inspect
           </div>
@@ -218,7 +174,6 @@ export function ExplorePageClient({
             </TabsContent>
           </Tabs>
         )}
-      </div>
     </div>
   );
 }
