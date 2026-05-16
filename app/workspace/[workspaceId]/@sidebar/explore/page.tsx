@@ -29,6 +29,9 @@ export default async function ExploreSidebarPage({
         }))}
         tables={data.tables}
         columns={data.columns}
+        sourcePerms={data.sourcePerms}
+        tablePerms={data.tablePerms}
+        columnPerms={data.columnPerms}
       />
     </Suspense>
   );

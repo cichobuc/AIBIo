@@ -3,6 +3,9 @@ import type { DataSourceStatus, DbDriver } from '@/core/types/workspace';
 export type TreeNodeKind = 'connection' | 'schema' | 'group' | 'table' | 'view' | 'column' | 'routine' | 'index';
 export type GroupType = 'tables' | 'views' | 'routines' | 'indexes';
 
+export type AccessTier = 'metadata_only' | 'with_reference_samples' | 'with_full_samples' | 'with_query_results';
+export type PiiClassification = 'none' | 'pii' | 'sensitive';
+
 type BaseNode = { id: string };
 
 export type ConnectionNode = BaseNode & {
@@ -11,6 +14,7 @@ export type ConnectionNode = BaseNode & {
   name: string;
   status: DataSourceStatus;
   dbType: DbDriver;
+  effectiveTier: AccessTier;
   children: TreeNode[];
 };
 
@@ -37,6 +41,7 @@ export type TableNode = BaseNode & {
   tableName: string;
   rowCount: number | null;
   isReferenceTable: boolean;
+  effectiveTier: AccessTier;
   children: TreeNode[];
 };
 
@@ -58,7 +63,9 @@ export type ColumnNode = BaseNode & {
   nullable: boolean;
   isPrimaryKey: boolean;
   isForeignKey: boolean;
-  piiCandidate: boolean;
+  piiClassification: PiiClassification;
+  piiSubtype: string | null;
+  effectiveTier: AccessTier;
 };
 
 export type RoutineNode = BaseNode & {
@@ -98,4 +105,11 @@ export type ContextAction =
   | 'refresh-schema'
   | 'copy-name'
   | 'open-in-explore'
-  | 'mark-pii';
+  | 'set-tier-metadata'
+  | 'set-tier-reference'
+  | 'set-tier-full'
+  | 'set-tier-query'
+  | 'clear-table-override'
+  | 'set-pii-none'
+  | 'set-pii-pii'
+  | 'set-pii-sensitive';

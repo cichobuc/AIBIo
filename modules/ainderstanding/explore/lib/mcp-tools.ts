@@ -166,12 +166,13 @@ type RunProfileQueryInput = {
   dataSourceId: string;
   tableName: string;
   adapter: SourceAdapter;
+  workspaceId?: string;
   thresholdRows?: number;
   topN?: number;
 };
 
 export async function runProfileQuery(input: RunProfileQueryInput): Promise<void> {
-  const { dataSourceId, tableName, adapter, thresholdRows, topN = 20 } = input;
+  const { dataSourceId, tableName, adapter, workspaceId, thresholdRows, topN = 20 } = input;
   const now = new Date().toISOString();
 
   const existingProfile = db
@@ -186,7 +187,7 @@ export async function runProfileQuery(input: RunProfileQueryInput): Promise<void
     .get();
 
   const sql = buildProfileQuery(tableName, existingProfile?.rowCount ?? null, thresholdRows);
-  const result = await profileTable({ dataSourceId, tableName, adapter, sql });
+  const result = await profileTable({ dataSourceId, tableName, adapter, sql, workspaceId });
 
   const rowCount = result.rowCount;
   const tableProfileId = existingProfile?.id ?? randomUUID();

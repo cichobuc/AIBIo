@@ -16,7 +16,14 @@ import { AddSourceWizard } from '@/modules/ainderstanding/connect/components/Add
 import { EditSourceDrawer } from '@/modules/ainderstanding/connect/components/EditSourceDrawer';
 import { RemoveSourceDialog } from '@/modules/ainderstanding/connect/components/RemoveSourceDialog';
 import type { DataSource, SchemaSnapshot } from '@/core/types/workspace';
-import type { ExploreSource, ExploreTableProfile, ExploreColumnProfile } from '../lib/explore-data';
+import type {
+  ExploreSource,
+  ExploreTableProfile,
+  ExploreColumnProfile,
+  ExploreSourcePerm,
+  ExploreTablePerm,
+  ExploreColumnPerm,
+} from '../lib/explore-data';
 
 type SnapshotRow = { dataSourceId: string; snapshotJson: string };
 import { buildSchemaTree } from './schema-tree/build-tree';
@@ -30,6 +37,9 @@ type Props = {
   snapshots: SnapshotRow[];
   tables: ExploreTableProfile[];
   columns: ExploreColumnProfile[];
+  sourcePerms: ExploreSourcePerm[];
+  tablePerms: ExploreTablePerm[];
+  columnPerms: ExploreColumnPerm[];
 };
 
 function loadExpanded(workspaceId: string): Set<string> {
@@ -48,7 +58,16 @@ function saveExpanded(workspaceId: string, expanded: Set<string>): void {
   } catch {}
 }
 
-export function ExploreSidebar({ workspaceId, sources, snapshots, tables, columns }: Props) {
+export function ExploreSidebar({
+  workspaceId,
+  sources,
+  snapshots,
+  tables,
+  columns,
+  sourcePerms,
+  tablePerms,
+  columnPerms,
+}: Props) {
   const router = useRouter();
   const sp = useSearchParams();
 
@@ -58,7 +77,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
   const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [removingSource, setRemovingSource] = useState<DataSource | null>(null);
 
-  // Persist expanded set to localStorage on change
   useEffect(() => {
     saveExpanded(workspaceId, expanded);
   }, [workspaceId, expanded]);
@@ -69,7 +87,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
     ? `src/${selectedSourceId}/schema/main/table/${selectedTable}`
     : null;
 
-  // Build snapshot map
   const snapshotMap = new Map<string, SchemaSnapshot>();
   for (const s of snapshots) {
     try {
@@ -77,7 +94,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
     } catch {}
   }
 
-  // Build profile maps
   const profileMap = new Map<string, ExploreTableProfile>();
   for (const t of tables) {
     profileMap.set(`${t.dataSourceId}:${t.tableName}`, t);
@@ -96,6 +112,9 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
     snapshots: snapshotMap,
     profiles: profileMap,
     columnProfiles: colProfileMap,
+    sourcePerms,
+    tablePerms,
+    columnPerms,
   });
 
   const { filtered, matchedAncestors } = filterTree(tree, search);
@@ -186,11 +205,8 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
           break;
 
         case 'refresh-schema': {
-          const sid = node.kind === 'connection' ? sourceId
-            : node.kind === 'schema' || node.kind === 'group' ? sourceId
-            : sourceId;
           try {
-            await fetch(`/api/data-sources/${workspaceId}/${sid}/refresh-schema`, { method: 'POST' });
+            await fetch(`/api/data-sources/${workspaceId}/${sourceId}/refresh-schema`, { method: 'POST' });
             router.refresh();
           } catch {}
           break;
@@ -220,9 +236,82 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
           break;
         }
 
-        case 'mark-pii':
-          // deferred — requires govern column-permissions endpoint
+        case 'set-tier-metadata':
+        case 'set-tier-reference':
+        case 'set-tier-full':
+        case 'set-tier-query': {
+          const tierMap = {
+            'set-tier-metadata': 'metadata_only',
+            'set-tier-reference': 'with_reference_samples',
+            'set-tier-full': 'with_full_samples',
+            'set-tier-query': 'with_query_results',
+          } as const;
+          const permissionTier = tierMap[action];
+
+          if (node.kind === 'connection') {
+            await fetch('/api/govern/source-permissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ workspaceId, dataSourceId: sourceId, permissionTier }),
+            }).catch(() => {});
+          } else if (node.kind === 'table') {
+            await fetch('/api/govern/table-permissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workspaceId,
+                dataSourceId: sourceId,
+                tableName: node.tableName,
+                permissionOverride: permissionTier,
+              }),
+            }).catch(() => {});
+          }
+          router.refresh();
           break;
+        }
+
+        case 'clear-table-override': {
+          if (node.kind === 'table') {
+            await fetch('/api/govern/table-permissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workspaceId,
+                dataSourceId: sourceId,
+                tableName: node.tableName,
+                permissionOverride: null,
+              }),
+            }).catch(() => {});
+            router.refresh();
+          }
+          break;
+        }
+
+        case 'set-pii-none':
+        case 'set-pii-pii':
+        case 'set-pii-sensitive': {
+          if (node.kind === 'column') {
+            const piiMap = {
+              'set-pii-none': 'none',
+              'set-pii-pii': 'pii',
+              'set-pii-sensitive': 'sensitive',
+            } as const;
+            await fetch('/api/govern/column-permissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workspaceId,
+                dataSourceId: sourceId,
+                tableName: node.parentName,
+                columnName: node.columnName,
+                piiClassification: piiMap[action],
+                setBy: 'user',
+              }),
+            }).catch(() => {});
+            router.refresh();
+          }
+          break;
+        }
       }
     },
     [sources, workspaceId, router],
@@ -235,14 +324,11 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
     router.refresh();
   };
 
-  const workspaceName = sources.length > 0 ? 'Explore' : 'Explore';
-
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          {workspaceName}
+          Explore
         </span>
         <Button
           variant="ghost"
@@ -255,7 +341,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
         </Button>
       </div>
 
-      {/* Search */}
       <div className="px-2 py-2">
         <Input
           placeholder="Filter..."
@@ -265,7 +350,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
         />
       </div>
 
-      {/* Tree with empty-area right-click */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <ContextMenu>
           <ContextMenuTrigger asChild>
@@ -289,7 +373,6 @@ export function ExploreSidebar({ workspaceId, sources, snapshots, tables, column
         </ContextMenu>
       </div>
 
-      {/* Dialogs */}
       <AddSourceWizard
         workspaceId={workspaceId}
         open={addOpen}

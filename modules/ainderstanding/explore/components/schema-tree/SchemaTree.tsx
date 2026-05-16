@@ -5,22 +5,30 @@ import {
   FolderTree,
   Table2,
   Eye,
+  EyeOff,
   FunctionSquare,
   KeyRound,
   Columns3,
   ChevronRight,
   ChevronDown,
-  Dot,
+  Shield,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
   ContextMenuTrigger,
   cn,
 } from '@/core/ui';
-import type { TreeNode, ContextAction, GroupType } from './types';
+import type { TreeNode, ContextAction, GroupType, AccessTier } from './types';
 
 type TreeCallbacks = {
   expanded: Set<string>;
@@ -54,6 +62,71 @@ const GROUP_LABELS: Record<GroupType, string> = {
   indexes: 'Indexes',
 };
 
+
+function TierIcon({ tier, className }: { tier: AccessTier; className?: string }) {
+  const base = cn('h-3 w-3 shrink-0', className);
+  switch (tier) {
+    case 'metadata_only':
+      return <Shield className={cn(base, 'text-muted-foreground/60')} />;
+    case 'with_reference_samples':
+      return <EyeOff className={cn(base, 'text-amber-400')} />;
+    case 'with_full_samples':
+      return <Eye className={cn(base, 'text-blue-400')} />;
+    case 'with_query_results':
+      return <Unlock className={cn(base, 'text-green-500')} />;
+  }
+}
+
+function TierSubmenu({ currentTier, node, onContextAction }: {
+  currentTier: AccessTier;
+  node: TreeNode;
+  onContextAction: (action: ContextAction, node: TreeNode) => void;
+}) {
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger className="text-xs">
+        <TierIcon tier={currentTier} className="mr-1.5" />
+        Set access tier…
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent>
+        <ContextMenuRadioGroup value={currentTier}>
+          <ContextMenuRadioItem
+            className="text-xs"
+            value="metadata_only"
+            onSelect={() => onContextAction('set-tier-metadata', node)}
+          >
+            <Shield className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
+            Metadata only
+          </ContextMenuRadioItem>
+          <ContextMenuRadioItem
+            className="text-xs"
+            value="with_reference_samples"
+            onSelect={() => onContextAction('set-tier-reference', node)}
+          >
+            <EyeOff className="h-3 w-3 mr-1.5 text-amber-400" />
+            Reference tables only
+          </ContextMenuRadioItem>
+          <ContextMenuRadioItem
+            className="text-xs"
+            value="with_full_samples"
+            onSelect={() => onContextAction('set-tier-full', node)}
+          >
+            <Eye className="h-3 w-3 mr-1.5 text-blue-400" />
+            Full samples
+          </ContextMenuRadioItem>
+          <ContextMenuRadioItem
+            className="text-xs"
+            value="with_query_results"
+            onSelect={() => onContextAction('set-tier-query', node)}
+          >
+            <Unlock className="h-3 w-3 mr-1.5 text-green-500" />
+            Full + query results
+          </ContextMenuRadioItem>
+        </ContextMenuRadioGroup>
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
+}
 
 function TreeRow({
   node,
@@ -93,7 +166,6 @@ function TreeRow({
             onClick={handleRowClick}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleRowClick(); }}
           >
-            {/* Chevron — dedicated toggle zone */}
             <span
               className="flex h-3 w-3 shrink-0 items-center justify-center text-muted-foreground"
               onClick={handleChevronClick}
@@ -103,7 +175,6 @@ function TreeRow({
               ) : null}
             </span>
 
-            {/* Icon + label */}
             <NodeIcon node={node} />
             <NodeLabel node={node} />
           </div>
@@ -111,48 +182,93 @@ function TreeRow({
         <ContextMenuContent>
           {node.kind === 'connection' && (
             <>
-              <ContextMenuItem onSelect={() => onContextAction('edit', node)}>Edit</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('test', node)}>Test connection</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('edit', node)}>Edit</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('test', node)}>Test connection</ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => onContextAction('refresh-schema', node)}>Refresh schema</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+              <TierSubmenu currentTier={node.effectiveTier} node={node} onContextAction={onContextAction} />
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => onContextAction('remove', node)} className="text-destructive focus:text-destructive">
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('refresh-schema', node)}>Refresh schema</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                className="text-xs text-destructive focus:text-destructive"
+                onSelect={() => onContextAction('remove', node)}
+              >
                 Remove
               </ContextMenuItem>
             </>
           )}
           {node.kind === 'schema' && (
             <>
-              <ContextMenuItem onSelect={() => onContextAction('refresh-schema', node)}>Refresh schema</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('refresh-schema', node)}>Refresh schema</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
             </>
           )}
           {node.kind === 'group' && (
-            <ContextMenuItem onSelect={() => onContextAction('refresh-schema', node)}>Refresh</ContextMenuItem>
+            <ContextMenuItem className="text-xs" onSelect={() => onContextAction('refresh-schema', node)}>Refresh</ContextMenuItem>
           )}
           {node.kind === 'table' && (
             <>
-              <ContextMenuItem onSelect={() => onContextAction('open-in-explore', node)}>Open in Explore</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('open-in-explore', node)}>Open in Explore</ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => onContextAction('refresh-schema', node)}>Refresh profile</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+              <TierSubmenu currentTier={node.effectiveTier} node={node} onContextAction={onContextAction} />
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('clear-table-override', node)}>
+                Clear table override
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('refresh-schema', node)}>Refresh profile</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
             </>
           )}
           {node.kind === 'view' && (
             <>
-              <ContextMenuItem onSelect={() => onContextAction('open-in-explore', node)}>Open in Explore</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('open-in-explore', node)}>Open in Explore</ContextMenuItem>
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
             </>
           )}
           {node.kind === 'column' && (
             <>
-              <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
-              <ContextMenuItem onSelect={() => onContextAction('mark-pii', node)}>Mark as PII</ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger className="text-xs">
+                  {node.piiClassification !== 'none' ? (
+                    <Lock className="h-3 w-3 mr-1.5 text-destructive" />
+                  ) : (
+                    <Shield className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
+                  )}
+                  PII classification…
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  <ContextMenuRadioGroup value={node.piiClassification}>
+                    <ContextMenuRadioItem
+                      className="text-xs"
+                      value="none"
+                      onSelect={() => onContextAction('set-pii-none', node)}
+                    >
+                      None
+                    </ContextMenuRadioItem>
+                    <ContextMenuRadioItem
+                      className="text-xs"
+                      value="pii"
+                      onSelect={() => onContextAction('set-pii-pii', node)}
+                    >
+                      PII
+                    </ContextMenuRadioItem>
+                    <ContextMenuRadioItem
+                      className="text-xs"
+                      value="sensitive"
+                      onSelect={() => onContextAction('set-pii-sensitive', node)}
+                    >
+                      Sensitive
+                    </ContextMenuRadioItem>
+                  </ContextMenuRadioGroup>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              <ContextMenuSeparator />
+              <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
             </>
           )}
           {(node.kind === 'routine' || node.kind === 'index') && (
-            <ContextMenuItem onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
+            <ContextMenuItem className="text-xs" onSelect={() => onContextAction('copy-name', node)}>Copy name</ContextMenuItem>
           )}
         </ContextMenuContent>
       </ContextMenu>
@@ -183,7 +299,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
   switch (node.kind) {
     case 'connection':
       return (
-        <span className="relative flex items-center">
+        <span className="relative flex items-center gap-0.5">
           <Database className={cn(cls, 'text-accent-ai')} />
           <span
             className={cn(
@@ -191,6 +307,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
               STATUS_DOT[node.status] ?? 'bg-muted-foreground',
             )}
           />
+          <TierIcon tier={node.effectiveTier} />
         </span>
       );
     case 'schema': return <FolderTree className={cls} />;
@@ -198,7 +315,13 @@ function NodeIcon({ node }: { node: TreeNode }) {
       const Icon = GROUP_ICONS[node.groupType];
       return <Icon className={cls} />;
     }
-    case 'table': return <Table2 className={cls} />;
+    case 'table':
+      return (
+        <span className="flex items-center gap-0.5">
+          <Table2 className={cls} />
+          <TierIcon tier={node.effectiveTier} />
+        </span>
+      );
     case 'view': return <Eye className={cls} />;
     case 'column':
       return (
@@ -206,6 +329,7 @@ function NodeIcon({ node }: { node: TreeNode }) {
           <Columns3 className={cls} />
           {node.isPrimaryKey && <KeyRound className="h-2.5 w-2.5 text-yellow-500" />}
           {node.isForeignKey && !node.isPrimaryKey && <KeyRound className="h-2.5 w-2.5 text-blue-400" />}
+          {node.piiClassification !== 'none' && <Lock className="h-2.5 w-2.5 text-destructive" />}
         </span>
       );
     case 'routine': return <FunctionSquare className={cls} />;
@@ -249,7 +373,9 @@ function NodeLabel({ node }: { node: TreeNode }) {
         <span className="flex items-center gap-1 overflow-hidden">
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{node.columnName}</span>
           <span className="shrink-0 text-[10px] text-muted-foreground">{node.dataType}</span>
-          {node.piiCandidate && <Dot className="h-3 w-3 shrink-0 text-orange-400" />}
+          {node.piiClassification !== 'none' && (
+            <span className="shrink-0 text-[10px] text-destructive uppercase">{node.piiClassification}</span>
+          )}
         </span>
       );
     case 'routine':

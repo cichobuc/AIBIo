@@ -25,6 +25,9 @@ export default async function ExplorePage({
         tables={data.tables}
         columns={data.columns}
         recentChanges={data.recentChanges}
+        sourcePerms={data.sourcePerms}
+        tablePerms={data.tablePerms}
+        columnPerms={data.columnPerms}
       />
     </Suspense>
   );

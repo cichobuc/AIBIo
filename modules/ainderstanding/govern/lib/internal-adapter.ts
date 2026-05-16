@@ -10,6 +10,7 @@ type ProfileTableInput = {
     executeSelect(sql: string): Promise<QueryResult>;
   };
   sql?: string;
+  workspaceId?: string;
 };
 
 // Direct access for profiling system operations — no approval gate.
@@ -18,23 +19,25 @@ export async function profileTable(input: ProfileTableInput): Promise<QueryResul
   const ctx = tryGetAgentContext();
   const sessionId = ctx?.sessionId ?? 'system';
   const agentName = ctx?.agentName ?? 'data-profiler';
-  const workspaceId = ctx?.workspaceId ?? 'system';
+  const workspaceId = input.workspaceId ?? ctx?.workspaceId;
 
   const sql = input.sql ?? `SELECT * FROM "${input.tableName}" LIMIT 1000`;
   const result = await input.adapter.executeSelect(sql);
 
   const maskedRows = maskRows(result.rows, input.dataSourceId, input.tableName);
 
-  log({
-    workspaceId,
-    dataSourceId: input.dataSourceId,
-    sessionId,
-    agentName,
-    actionType: 'read_sample',
-    tableName: input.tableName,
-    outcome: 'allowed',
-    detail: { mode: 'profiling', rowCount: result.rowCount },
-  });
+  if (workspaceId) {
+    log({
+      workspaceId,
+      dataSourceId: input.dataSourceId,
+      sessionId,
+      agentName,
+      actionType: 'read_sample',
+      tableName: input.tableName,
+      outcome: 'allowed',
+      detail: { mode: 'profiling', rowCount: result.rowCount },
+    });
+  }
 
   return { columns: result.columns, rows: maskedRows, rowCount: maskedRows.length };
 }
