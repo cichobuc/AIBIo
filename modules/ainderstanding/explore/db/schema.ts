@@ -1,6 +1,7 @@
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { dataSources } from '@/core/db/schema/data-source';
+import { workspaces } from '@/core/db/schema/workspace';
 
 const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
@@ -110,3 +111,53 @@ export type SchemaChangeType =
   | 'column_removed'
   | 'column_type_changed'
   | 'column_nullability_changed';
+
+export const querySessions = sqliteTable(
+  'query_sessions',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    dataSourceId: text('data_source_id')
+      .notNull()
+      .references(() => dataSources.id, { onDelete: 'cascade' }),
+    title: text('title'),
+    sqlDraft: text('sql_draft').notNull().default(''),
+    isClosed: integer('is_closed', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').notNull().default(now),
+    updatedAt: text('updated_at').notNull().default(now),
+  },
+  (t) => [index('query_sessions_workspace_open_idx').on(t.workspaceId, t.isClosed)],
+);
+
+export const queryHistory = sqliteTable(
+  'query_history',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id').references(() => querySessions.id, { onDelete: 'set null' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    dataSourceId: text('data_source_id')
+      .notNull()
+      .references(() => dataSources.id, { onDelete: 'cascade' }),
+    sqlText: text('sql_text').notNull(),
+    sqlHash: text('sql_hash').notNull(),
+    rowCount: integer('row_count'),
+    durationMs: integer('duration_ms'),
+    outcome: text('outcome', {
+      enum: ['success', 'blocked_sqlgate', 'blocked_tier', 'error', 'timeout'],
+    }).notNull(),
+    errorMessage: text('error_message'),
+    resultColumnsJson: text('result_columns_json'),
+    executedAt: text('executed_at').notNull().default(now),
+  },
+  (t) => [
+    index('query_history_workspace_idx').on(t.workspaceId),
+    index('query_history_session_idx').on(t.sessionId),
+    index('query_history_executed_idx').on(t.executedAt),
+  ],
+);
+
+export type QueryHistoryOutcome = 'success' | 'blocked_sqlgate' | 'blocked_tier' | 'error' | 'timeout';

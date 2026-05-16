@@ -100,6 +100,7 @@ export const approvalSettings = sqliteTable('approval_settings', {
     .notNull()
     .default('never_ask'),
   approvalTimeoutSec: integer('approval_timeout_sec').notNull().default(300),
+  queryResultsMaxRows: integer('query_results_max_rows').notNull().default(1000),
   createdAt: text('created_at').notNull().default(now),
   updatedAt: text('updated_at').notNull().default(now),
 });

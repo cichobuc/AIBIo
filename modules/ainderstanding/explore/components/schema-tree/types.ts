@@ -99,6 +99,7 @@ export type TreeNode =
 
 export type ContextAction =
   | 'add-connection'
+  | 'new-query-here'
   | 'edit'
   | 'test'
   | 'remove'

@@ -6,11 +6,13 @@ import { Loader2 } from 'lucide-react';
 import { ColumnProfileDetailTab } from '@/modules/ainderstanding/explore/components/ColumnProfileDetailTab';
 import { SchemaDiffViewer } from '@/modules/ainderstanding/explore/components/SchemaDiffViewer';
 import { TableDetailTab } from '@/modules/ainderstanding/explore/components/TableDetailTab';
+import { QueryEditorContainer } from '@/modules/ainderstanding/explore/components/query-editor/QueryEditorContainer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/core/ui/tabs';
 import { Badge } from '@/core/ui/badge';
 import { Button } from '@/core/ui/button';
 import type { AccessTier } from '@/modules/ainderstanding/explore/components/schema-tree/types';
 import type {
+  ExploreSource,
   ExploreSourcePerm,
   ExploreTablePerm,
   ExploreColumnPerm,
@@ -54,14 +56,27 @@ type SchemaChange = {
   detectedAt: string;
 };
 
+type QuerySession = {
+  id: string;
+  workspaceId: string;
+  dataSourceId: string;
+  title: string | null;
+  sqlDraft: string;
+  isClosed: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type Props = {
   workspaceId: string;
+  sources: ExploreSource[];
   tables: TableProfile[];
   columns: ColumnProfile[];
   recentChanges: SchemaChange[];
   sourcePerms: ExploreSourcePerm[];
   tablePerms: ExploreTablePerm[];
   columnPerms: ExploreColumnPerm[];
+  openSessions: QuerySession[];
 };
 
 type SelectedTable = { sourceId: string; tableName: string };
@@ -104,20 +119,24 @@ function computeEffectiveTier(
 
 export function ExplorePageClient({
   workspaceId,
+  sources,
   tables,
   columns,
   recentChanges,
   sourcePerms,
   tablePerms,
   columnPerms,
+  openSessions,
 }: Props) {
   const sp = useSearchParams();
   const router = useRouter();
   const [profilingTable, setProfilingTable] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
+  const querySessionId = sp.get('query');
+
   const selectedTable: SelectedTable | undefined =
-    sp.get('source') && sp.get('table')
+    !querySessionId && sp.get('source') && sp.get('table')
       ? { sourceId: sp.get('source')!, tableName: sp.get('table')! }
       : undefined;
 
@@ -151,6 +170,18 @@ export function ExplorePageClient({
       setProfilingTable(null);
     }
   };
+
+  // When a query session is active, render the query editor
+  if (querySessionId) {
+    return (
+      <QueryEditorContainer
+        workspaceId={workspaceId}
+        initialSessions={openSessions}
+        sources={sources}
+        activeSessionId={querySessionId}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col min-w-0">

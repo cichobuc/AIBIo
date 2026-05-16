@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Code2 } from 'lucide-react';
 import {
   Button,
   Input,
@@ -15,6 +15,8 @@ import {
 import { AddSourceWizard } from '@/modules/ainderstanding/connect/components/AddSourceWizard';
 import { EditSourceDrawer } from '@/modules/ainderstanding/connect/components/EditSourceDrawer';
 import { RemoveSourceDialog } from '@/modules/ainderstanding/connect/components/RemoveSourceDialog';
+import { AddInExploreMenu } from './AddInExploreMenu';
+import { SourcePickerDialog } from './query-editor/SourcePickerDialog';
 import type { DataSource, SchemaSnapshot } from '@/core/types/workspace';
 import type {
   ExploreSource,
@@ -74,6 +76,7 @@ export function ExploreSidebar({
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(() => loadExpanded(workspaceId));
   const [addOpen, setAddOpen] = useState(false);
+  const [queryPickerOpen, setQueryPickerOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [removingSource, setRemovingSource] = useState<DataSource | null>(null);
 
@@ -150,6 +153,28 @@ export function ExploreSidebar({
     [router],
   );
 
+  const openNewQuery = useCallback(
+    async (sourceId?: string) => {
+      const dataSourceId = sourceId ?? selectedSourceId;
+      if (!dataSourceId) {
+        setQueryPickerOpen(true);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/explore/${workspaceId}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataSourceId }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { session: { id: string } };
+          router.push(`?query=${encodeURIComponent(data.session.id)}`, { scroll: false });
+        }
+      } catch {}
+    },
+    [workspaceId, selectedSourceId, router],
+  );
+
   const handleContextAction = useCallback(
     async (action: ContextAction, node: TreeNode) => {
       const sourceId = node.sourceId;
@@ -157,6 +182,10 @@ export function ExploreSidebar({
       switch (action) {
         case 'add-connection':
           setAddOpen(true);
+          break;
+
+        case 'new-query-here':
+          await openNewQuery(sourceId);
           break;
 
         case 'edit': {
@@ -314,7 +343,7 @@ export function ExploreSidebar({
         }
       }
     },
-    [sources, workspaceId, router],
+    [sources, workspaceId, router, openNewQuery],
   );
 
   const handleRemoveConfirm = async () => {
@@ -330,15 +359,10 @@ export function ExploreSidebar({
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Explore
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => setAddOpen(true)}
-          title="Add connection"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
+        <AddInExploreMenu
+          onAddConnection={() => setAddOpen(true)}
+          onNewQuery={() => openNewQuery()}
+        />
       </div>
 
       <div className="px-2 py-2">
@@ -369,9 +393,23 @@ export function ExploreSidebar({
               <Plus className="h-3.5 w-3.5" />
               Add Connection
             </ContextMenuItem>
+            <ContextMenuItem onSelect={() => openNewQuery()}>
+              <Code2 className="h-3.5 w-3.5" />
+              New Query
+            </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       </div>
+
+      <SourcePickerDialog
+        open={queryPickerOpen}
+        sources={sources}
+        onConfirm={(sourceId) => {
+          setQueryPickerOpen(false);
+          openNewQuery(sourceId);
+        }}
+        onClose={() => setQueryPickerOpen(false)}
+      />
 
       <AddSourceWizard
         workspaceId={workspaceId}

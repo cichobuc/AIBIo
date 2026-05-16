@@ -4,6 +4,8 @@ import type { SqlRejectedError } from '@/core/types/workspace';
 
 export { SqlRejectedErr } from './ast-parser';
 export type { SqlRejectedError } from '@/core/types/workspace';
+export { extractTableRefs } from './extract-tables';
+export { injectLimit } from './limit-injector';
 
 export function validateSelectOnly(sql: string): void {
   const regexResult = regexPrecheck(sql);
