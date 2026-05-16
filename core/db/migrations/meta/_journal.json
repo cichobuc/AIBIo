@@ -15,6 +15,20 @@
       "when": 1778884644187,
       "tag": "0001_nervous_the_hand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778913097997,
+      "tag": "0002_tranquil_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1778913307635,
+      "tag": "0003_odd_baron_zemo",
+      "breakpoints": true
     }
   ]
 }

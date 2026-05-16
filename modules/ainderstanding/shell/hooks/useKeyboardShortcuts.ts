@@ -10,12 +10,19 @@ export function useKeyboardShortcuts(workspaceId: string) {
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar);
   const toggleChatPanel = useWorkspaceStore((s) => s.toggleChatPanel);
   const toggleBottomPanel = useWorkspaceStore((s) => s.toggleBottomPanel);
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
   const router = useRouter();
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       const meta = e.metaKey || e.ctrlKey;
       const shift = e.shiftKey;
+
+      if (meta && !shift && e.key === ',') {
+        e.preventDefault();
+        openSettings();
+        return;
+      }
 
       if (meta && !shift && e.key === 'b') {
         e.preventDefault();
@@ -48,5 +55,5 @@ export function useKeyboardShortcuts(workspaceId: string) {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [workspaceId, toggleSidebar, toggleChatPanel, toggleBottomPanel, router]);
+  }, [workspaceId, toggleSidebar, toggleChatPanel, toggleBottomPanel, openSettings, router]);
 }

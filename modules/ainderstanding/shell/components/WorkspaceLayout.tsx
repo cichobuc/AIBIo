@@ -13,6 +13,7 @@ import { ApprovalDialog } from './ApprovalDialog';
 import { BottomPanel } from './BottomPanel';
 import { StatusBar } from './StatusBar';
 import { CommandPalette } from './CommandPalette';
+import { SettingsDialog } from './settings/SettingsDialog';
 
 // react-resizable-panels v4 treats defaultSize as pixel units.
 // We measure the container before mount and convert percentages to pixels.
@@ -127,6 +128,7 @@ export function WorkspaceLayout({
 
       <ApprovalDialog />
       <CommandPalette workspaceId={workspaceId} />
+      <SettingsDialog workspaceId={workspaceId} />
     </div>
   );
 }

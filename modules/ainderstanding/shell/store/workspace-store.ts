@@ -9,6 +9,16 @@ type PendingApproval = Extract<SSEEvent, { type: 'approval_required' }>['payload
 
 type ActiveAgent = { agentName: string; message: string };
 
+export type SettingsSection =
+  | 'ai-behavior'
+  | 'approval-gates'
+  | 'data-profiling'
+  | 'models-sql'
+  | 'documentation'
+  | 'testing'
+  | 'connections'
+  | 'ui-ux';
+
 interface WorkspaceState {
   workspaceId: string;
   aiMode: AIMode;
@@ -18,6 +28,9 @@ interface WorkspaceState {
   sidebarOpen: boolean;
   chatPanelOpen: boolean;
   bottomPanelOpen: boolean;
+
+  settingsOpen: boolean;
+  activeSettingsSection: SettingsSection;
 
   pendingApproval: PendingApproval | null;
   activeAgents: ActiveAgent[];
@@ -35,6 +48,10 @@ interface WorkspaceActions {
   setSidebarOpen: (open: boolean) => void;
   setChatPanelOpen: (open: boolean) => void;
   setBottomPanelOpen: (open: boolean) => void;
+
+  openSettings: (section?: SettingsSection) => void;
+  closeSettings: () => void;
+  setActiveSettingsSection: (section: SettingsSection) => void;
 
   setPendingApproval: (approval: PendingApproval | null) => void;
   addActiveAgent: (agent: ActiveAgent) => void;
@@ -57,6 +74,9 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       chatPanelOpen: true,
       bottomPanelOpen: false,
 
+      settingsOpen: false,
+      activeSettingsSection: 'ai-behavior',
+
       pendingApproval: null,
       activeAgents: [],
       messages: [],
@@ -71,6 +91,10 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
       setBottomPanelOpen: (open) => set({ bottomPanelOpen: open }),
+
+      openSettings: (section) => set({ settingsOpen: true, activeSettingsSection: section ?? 'ai-behavior' }),
+      closeSettings: () => set({ settingsOpen: false }),
+      setActiveSettingsSection: (section) => set({ activeSettingsSection: section }),
 
       setPendingApproval: (approval) => set({ pendingApproval: approval }),
       addActiveAgent: (agent) =>

@@ -14,6 +14,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, cn } from '@/core/ui';
+import { useWorkspaceStore } from '../store/workspace-store';
 
 const MODULES = [
   { key: 'connect', icon: Database, label: 'Connect', tip: 'Manage data sources' },
@@ -31,12 +32,14 @@ function ActivityItem({
   label,
   tip,
   active,
+  onClick,
 }: {
   href?: string;
   icon: React.ElementType;
   label: string;
   tip: string;
   active?: boolean;
+  onClick?: () => void;
 }) {
   const className = cn(
     'relative flex h-[48px] w-[48px] items-center justify-center text-muted-foreground transition-colors hover:text-foreground hover:bg-card',
@@ -51,7 +54,7 @@ function ActivityItem({
             <Icon className="h-[18px] w-[18px]" />
           </Link>
         ) : (
-          <button className={className} aria-label={label}>
+          <button className={className} aria-label={label} onClick={onClick}>
             <Icon className="h-[18px] w-[18px]" />
           </button>
         )}
@@ -67,6 +70,7 @@ function ActivityItem({
 
 export function ActivityBar({ workspaceId }: { workspaceId: string }) {
   const pathname = usePathname();
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
 
   return (
     <TooltipProvider>
@@ -99,7 +103,7 @@ export function ActivityBar({ workspaceId }: { workspaceId: string }) {
 
         {/* Bottom actions */}
         <div className="border-t border-border">
-          <ActivityItem icon={Settings} label="Settings" tip="Settings (⌘,)" />
+          <ActivityItem icon={Settings} label="Settings" tip="Settings (⌘,)" onClick={() => openSettings()} />
           <ActivityItem icon={HelpCircle} label="Help" tip="Help & docs" />
         </div>
       </nav>

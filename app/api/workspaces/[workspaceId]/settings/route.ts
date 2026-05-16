@@ -55,8 +55,9 @@ export async function PATCH(
     'topValuesPerColumn', 'schemaChangeAutoDetect', 'piiHeuristicsEnabled',
     'selfHealMaxRetries', 'parallelBuildConcurrency', 'autoRunTestsAfterMaterialize',
     'aiTestGenerationEnabled', 'testExecutionTimeoutSec', 'failingPkSamplesCount',
-    'autoWriteDocs', 'docVerbosity', 'docConfidenceThreshold', 'showToolCalls',
-    'maxSupervisorTurns', 'sessionTimeoutMin',
+    'testParallelConcurrency', 'autoWriteDocs', 'docVerbosity', 'docConfidenceThreshold',
+    'includeSampleDataInDocs', 'showToolCalls', 'maxSupervisorTurns', 'sessionTimeoutMin',
+    'chatHistoryRetentionCount',
   ]);
 
   const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };

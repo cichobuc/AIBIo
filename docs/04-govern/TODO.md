@@ -1,7 +1,7 @@
 # TODO — Govern (GDPR Control Plane)
 
 > **Phase:** G1 (enforcement layer) → G2 (UI)
-> **Status:** not started
+> **Status:** G1 done, G2 not started
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §6.3 §8, ../DATABASE_SCHEMA.md §5 (permissions, audit), ../MCP_TOOLS.md §Govern, ../API_CONTRACT.md §approvals §govern, ../AGENT_PROMPTS.md (žiadni vlastní agenti)
 
@@ -12,7 +12,7 @@ Cross-cutting governance, GDPR control plane a audit layer. Vynucuje **3-vrstvov
 ## 2. Stav existujúceho kódu
 
 - [x] `app/api/approvals/[requestId]/route.ts` — exists (v Core), volá `resolveApproval`
-- [ ] Všetko ostatné — greenfield
+- [x] Všetko G1 — implementované
 
 ## 3. Závislosti
 
@@ -24,33 +24,32 @@ Cross-cutting governance, GDPR control plane a audit layer. Vynucuje **3-vrstvov
 
 ### 4.1 DB schema (`modules/ainderstanding/govern/db/schema.ts`)
 
-- [ ] Tabuľka `source_permissions` (DATABASE_SCHEMA.md §5):
+- [x] Tabuľka `source_permissions` (DATABASE_SCHEMA.md §5):
   - `id` UUID PK, `data_source_id` FK `data_sources.id` CASCADE UNIQUE
   - `permission_tier` enum(`metadata_only`, `with_reference_samples`, `with_full_samples`, `with_query_results`) default `metadata_only`
   - `updated_at`
-- [ ] Tabuľka `table_permissions` (DATABASE_SCHEMA.md §5):
+- [x] Tabuľka `table_permissions` (DATABASE_SCHEMA.md §5):
   - `id`, `data_source_id` FK, `table_name` varchar NOT NULL
   - `permission_override` enum (rovnaká ako `permission_tier`) nullable — null = follow source
   - UNIQUE(`data_source_id`, `table_name`)
-- [ ] Tabuľka `column_permissions` (DATABASE_SCHEMA.md §5):
+- [x] Tabuľka `column_permissions` (DATABASE_SCHEMA.md §5):
   - `id`, `data_source_id` FK, `table_name`, `column_name` NOT NULL
   - `pii_classification` enum(`none`, `pii`, `sensitive`) nullable
-  - `pii_subtype` enum(`name`, `email`, `phone`, `address`, `id_number`, `financial`, `health`, `biometric`, `other`) nullable
-  - `set_by` enum(`user`, `ai_suggestion`) NOT NULL
-  - `classified_at`, `classified_by_session` nullable
+  - `pii_subtype` enum(`email`, `phone`, `national_id`, `address`, `ip`, `name`, `date_of_birth`, `iban`, `other`) nullable (per DATABASE_SCHEMA.md)
+  - `set_by` enum(`user`, `heuristic`) NOT NULL (per DATABASE_SCHEMA.md)
   - UNIQUE(`data_source_id`, `table_name`, `column_name`)
-- [ ] Tabuľka `approval_settings` (DATABASE_SCHEMA.md §5):
+- [x] Tabuľka `approval_settings` (DATABASE_SCHEMA.md §5):
   - `id`, `workspace_id` FK UNIQUE
-  - `policy_execute_query` enum(`always_ask`, `session_remember`, `auto_approve`) default `always_ask`
-  - `policy_share_results` enum rovnaký, default `always_ask`
-  - `policy_write_to_docs` enum, default `threshold_based` (BR-GOV-060: approval iba ak confidence < high)
-  - `policy_schema_introspect` enum, default `auto_approve`
+  - `policy_execute_query` enum(`always_ask`, `never_ask`, `threshold_based`) default `always_ask`
+  - `policy_share_results` enum(`always_ask`, `never_ask`, `auto_reference`) default `always_ask`
+  - `policy_write_to_docs` enum(`always_ask`, `threshold_based`, `never_ask`) default `threshold_based`
+  - `policy_schema_introspect` enum(`never_ask`, `always_ask`) default `never_ask`
   - `approval_timeout_sec` default `300`
-- [ ] Tabuľka `audit_entries` (DATABASE_SCHEMA.md §5) — **read-only po insert**:
+- [x] Tabuľka `audit_entries` (DATABASE_SCHEMA.md §5) — **read-only po insert**:
   - `id` UUID PK, `workspace_id`, `data_source_id` nullable, `session_id`
-  - `agent_name` varchar, `action_type` enum(`read_schema`, `read_native_comments`, `read_samples`, `execute_query`, `share_results`, `write_doc`, `write_model`, `write_test`, `pii_classify`)
+  - `agent_name` varchar, `action_type` enum(`read_schema`, `read_sample`, `run_query`, `share_results`, `write_doc`, `write_model`, `write_test`)
   - `table_name` nullable, `column_names_json` nullable, `sql_hash` nullable (SHA-256 SQL, nie SQL samotný)
-  - `outcome` enum(`allowed`, `denied`, `timeout`, `blocked`)
+  - `outcome` enum(`allowed`, `blocked`, `approval_granted`, `approval_denied`, `timeout`)
   - `detail_json` text, `created_at` timestamp NOT NULL
   - **NIKDY update ani delete** — audit log je append-only
 
@@ -58,32 +57,31 @@ Cross-cutting governance, GDPR control plane a audit layer. Vynucuje **3-vrstvov
 
 Všetky guarded wrappers: preflight permission check → (approval gate ak treba) → call Connect adapter → audit → vrátiť výsledok.
 
-- [ ] `guarded_introspect_schema`:
+- [x] `guarded_introspect_schema`:
   - Permission check: Layer 1 — vždy allowed ak source existuje
   - Audit: `action_type='read_schema'`
   - `allowedCallers: ['schema-explorer', 'supervisor']`
 
-- [ ] `guarded_read_native_comments`:
+- [x] `guarded_read_native_comments`:
   - Permission check: Layer 1 — vždy allowed
-  - Audit: `action_type='read_native_comments'`
+  - Audit: `action_type='read_schema'` s `detail.sub='native_comments'`
   - `allowedCallers: ['schema-explorer', 'docs-keeper']`
 
-- [ ] `guarded_sample_data`:
-  - Permission check: Layer 2 — vyžaduje `permission_tier >= with_reference_samples` A `table_permissions.is_reference_table=true` (z `table_profiles`)
+- [x] `guarded_sample_data`:
+  - Permission check: Layer 2 — vyžaduje `permission_tier >= with_reference_samples` A `isReferenceTable=true`
   - PII masking: stĺpce kde `pii_classification IS NOT NULL` → `[{TYPE}_MASKED]` (non-bypassable)
-  - Audit: `action_type='read_samples'`, `outcome` podľa výsledku
+  - Audit: `action_type='read_sample'`, `outcome` podľa výsledku
   - `allowedCallers: ['data-profiler', 'model-architect']`
 
-- [ ] `guarded_run_select_query`:
-  - SQL parser gate (z Connect lib) pred odoslaním
-  - Approval gate: `awaitApproval('execute_query', payload: { sql, estimatedRows })` — podľa `approval_settings.policy_execute_query`
+- [x] `guarded_run_select_query`:
+  - Approval gate: `awaitApproval('execute_query', payload: { sql, dataSourceName })`
   - Cache výsledok: `result-cache.ts` (TTL 300s, session-scoped, in-memory)
   - Agent dostane iba metadata: `{ rowCount, columns, resultHandle }` — nikdy raw rows
-  - Audit: `action_type='execute_query'`, `sql_hash=SHA256(sql)`
+  - Audit: `action_type='run_query'`, `sql_hash=SHA256(sql)`
   - `allowedCallers: ['sql-writer']`
 
-- [ ] `guarded_share_results`:
-  - Approval gate: `awaitApproval('share_results_with_ai', payload: { resultHandle, rowCount })`
+- [x] `guarded_share_results`:
+  - Approval gate: `awaitApproval('share_results_with_ai', payload: { rowCount, columns, queryPreview })`
   - Načíta z `result-cache` cez `resultHandle` — ak expired alebo neexistuje → error
   - Aplikuje PII masking na rows (column_permissions lookup)
   - Vráti faktické rows agentovi iba po approve
@@ -92,30 +90,30 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 
 ### 4.3 Internal adapter (pre Explore profiling)
 
-- [ ] `modules/ainderstanding/govern/lib/internal-adapter.ts`:
+- [x] `modules/ainderstanding/govern/lib/internal-adapter.ts`:
   - `profileTable(dataSourceId, tableName, stats: ProfileStats): Promise<void>` — priamy prístup cez Connect adapter, BEZ approval gate (profiling je systémová operácia)
-  - Audit: `action_type='read_samples'` s `detail_json: { mode: 'profiling', sampling: true/false }`
-  - PII pre-filter pred uložením top_values do `column_profiles`
+  - Audit: `action_type='read_sample'` s `detail_json: { mode: 'profiling', rowCount }`
+  - PII masking aplikovaný na vrátené rows
   - Volané iba z Explore `run_profile_query` MCP tool handler
 
 ### 4.4 Lib (`modules/ainderstanding/govern/lib/`)
 
-- [ ] `permission-service.ts`:
+- [x] `permission-service.ts`:
   - `getEffectivePermission(dataSourceId, tableName?, columnName?): PermissionTier`
   - Precedencia: column_permissions > table_permissions > source_permissions (najstrictnejšie vyhráva — BR-GOV-012)
   - Cached per request (iba in-memory, nie DB cache)
-- [ ] `pii-masking.ts`:
+- [x] `pii-masking.ts`:
   - `maskRow(row: Record<string, unknown>, columnPermissions: ColumnPermission[]): Record<string, unknown>`
   - Formát: `[{PII_SUBTYPE}_MASKED]` napr. `[EMAIL_MASKED]`
   - **Non-bypassable** — žiadny escape hatch pre agentov
   - Aplikuje sa aj na reference table samples
-- [ ] `result-cache.ts`:
+- [x] `result-cache.ts`:
   - In-memory `Map<resultHandle, { rows, columns, sessionId, expiresAt }>`
   - TTL 300s od insertu
-  - Session-scoped cleanup: pri `stream_end` SSE event vymaž všetky entries pre daný sessionId
+  - Session-scoped cleanup: `evictSession(sessionId)` — volať pri `stream_end`
   - `storeResult(sessionId, rows, columns): ResultHandle`
   - `getResult(resultHandle, sessionId): QueryResult | null` — null ak expired alebo wrong session
-- [ ] `audit-logger.ts`:
+- [x] `audit-logger.ts`:
   - `log(entry: AuditEntry): void` — append-only insert do `audit_entries`
   - **Non-bypassable** — volaný priamo z každého guarded wrapper, nie cez MCP tool call chain
   - `audit_entries` je append-only — žiadny UPDATE/DELETE, žiadny setter pre vypnutie
@@ -126,9 +124,9 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 
 ### 4.5 API endpointy
 
-- [ ] `app/api/govern/column-permissions/route.ts` — POST:
-  - Body: `{ dataSourceId, tableName, columnName, piiClassification, piiSubtype, setBy: 'user' }`
-  - Uloží do `column_permissions`, audit log
+- [x] `app/api/govern/column-permissions/route.ts` — POST:
+  - Body: `{ dataSourceId, workspaceId, tableName, columnName, piiClassification, piiSubtype, setBy }`
+  - Uloží do `column_permissions` (upsert), audit log
   - Volaný z PIICandidatesPanel (Explore) a ClassifyColumnTab (Govern)
 - [ ] `app/api/approvals/[requestId]/route.ts` — **existuje z Core**, iba overiť integráciu s `approval_settings.policy_*`
 
@@ -162,16 +160,16 @@ Všetky guarded wrappers: preflight permission check → (approval gate ak treba
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 
-- [ ] BR-GOV-001/002/003: 3-vrstvový model — Layer 1 ALLOW, Layer 2 DENY s opt-in, Layer 3 DENY s per-query approval
-- [ ] BR-GOV-012: permission precedencia — najstrictnejšia úroveň vyhráva (column > table > source)
+- [x] BR-GOV-001/002/003: 3-vrstvový model — Layer 1 ALLOW, Layer 2 DENY s opt-in, Layer 3 DENY s per-query approval
+- [x] BR-GOV-012: permission precedencia — najstrictnejšia úroveň vyhráva (column > table > source)
 - [ ] BR-GOV-022: ApprovalDeniedError nie je trigger pre retry v sql-writer
 - [ ] BR-GOV-023: approval je per-request jednorazový (pokiaľ nie je "Approve for session" zvolené)
-- [ ] BR-GOV-030: PII masking non-bypassable — aj reference tables, aj po share_results_with_ai approve
+- [x] BR-GOV-030: PII masking non-bypassable — aj reference tables, aj po share_results_with_ai approve
 - [ ] BR-GOV-032: `column_permissions` je source of truth pre PII — Explore `column_profiles.pii_candidate` je iba suggestion
-- [ ] BR-GOV-041: audit log je append-only — žiadny UPDATE/DELETE na `audit_entries`, žiadna UI možnosť vypnúť
-- [ ] BR-GOV-042: blocked operácie (outcome=denied/timeout) musia byť zaauditované
-- [ ] BR-GOV-050: result handle TTL 5 min (300s), in-memory iba
-- [ ] BR-GOV-051: result handle session-scoped — iný user/session nemôže načítať cudzí result
+- [x] BR-GOV-041: audit log je append-only — žiadny UPDATE/DELETE na `audit_entries`, žiadna UI možnosť vypnúť
+- [x] BR-GOV-042: blocked operácie (outcome=denied/timeout) musia byť zaauditované
+- [x] BR-GOV-050: result handle TTL 5 min (300s), in-memory iba
+- [x] BR-GOV-051: result handle session-scoped — iný user/session nemôže načítať cudzí result
 - [ ] BR-GOV-061: write_to_docs approval skip ak `confidence='high'`
 
 ## 6. Verifikácia (end-to-end)

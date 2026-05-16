@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Settings, HelpCircle } from 'lucide-react';
 import { Button, Avatar, AvatarFallback, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/core/ui';
 import { ModeSelector } from './ModeSelector';
+import { useWorkspaceStore } from '../store/workspace-store';
 
 const MODULE_LABELS: Record<string, string> = {
   connect: 'Connect',
@@ -19,6 +20,7 @@ const MODULE_LABELS: Record<string, string> = {
 
 export function TopBar({ workspaceId }: { workspaceId: string }) {
   const pathname = usePathname();
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
   const segments = pathname.split('/').filter(Boolean);
   const moduleSegment = segments[segments.length - 1];
   const moduleLabel = moduleSegment ? MODULE_LABELS[moduleSegment] : undefined;
@@ -50,7 +52,12 @@ export function TopBar({ workspaceId }: { workspaceId: string }) {
 
           <Tooltip delayDuration={400}>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => openSettings()}
+              >
                 <Settings className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

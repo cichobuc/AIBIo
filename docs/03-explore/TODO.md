@@ -1,7 +1,7 @@
 # TODO — Explore (Schema Discovery + Data Profiling)
 
 > **Phase:** E1 (schema discovery) + E2 (data profiling + PII detection)
-> **Status:** not started
+> **Status:** E1 + E2 done (schema discovery, profiling, PII detection, UI)
 > **Owner docs:** [GOAL.md](./GOAL.md), [RULES.md](./RULES.md), [UI.md](./UI.md)
 > **Cross-refs:** ../ARCHITECTURE.md §6.2, ../DATABASE_SCHEMA.md §3 (snapshots, profiles), ../MCP_TOOLS.md §Explore, ../API_CONTRACT.md §Explore, ../AGENT_PROMPTS.md §2–3
 
@@ -22,24 +22,24 @@ Po pridaní source-u introspectne schému (schema-explorer agent), paralelne pro
 
 ### 4.1 DB schema (`modules/ainderstanding/explore/db/schema.ts`)
 
-- [ ] Tabuľka `schema_snapshots` (DATABASE_SCHEMA.md §3):
+- [x] Tabuľka `schema_snapshots` (DATABASE_SCHEMA.md §3):
   - `id` UUID PK, `data_source_id` FK `data_sources.id` CASCADE
   - `snapshot_json` text NOT NULL — serializovaný SchemaSnapshot
   - `table_count`, `column_count` integer
   - `taken_at` timestamp NOT NULL
-- [ ] Tabuľka `schema_changes` (DATABASE_SCHEMA.md §3):
+- [x] Tabuľka `schema_changes` (DATABASE_SCHEMA.md §3):
   - `id` UUID PK, `data_source_id` FK
   - `from_snapshot_id`, `to_snapshot_id` FK `schema_snapshots.id`
   - `change_type` enum(`table_added`, `table_removed`, `column_added`, `column_removed`, `column_type_changed`, `column_nullable_changed`)
   - `table_name`, `column_name` nullable, `detail_json`
   - `detected_at` timestamp
-- [ ] Tabuľka `table_profiles` (DATABASE_SCHEMA.md §3):
+- [x] Tabuľka `table_profiles` (DATABASE_SCHEMA.md §3):
   - `id` UUID PK, `data_source_id` FK, `table_name` varchar NOT NULL
   - `row_count` bigint, `is_reference_table` boolean default `false`
   - `sample_permission_override` boolean nullable — null = follow source-level, true/false = override
   - `profiled_at` timestamp nullable
   - UNIQUE(`data_source_id`, `table_name`)
-- [ ] Tabuľka `column_profiles` (DATABASE_SCHEMA.md §3):
+- [x] Tabuľka `column_profiles` (DATABASE_SCHEMA.md §3):
   - `id` UUID PK, `table_profile_id` FK CASCADE, `data_source_id`, `table_name`, `column_name`
   - `data_type` varchar, `null_count`, `null_rate` decimal
   - `distinct_count` bigint, `top_values_json` text (max 20 values, PII pre-filtered)
@@ -54,12 +54,12 @@ Po pridaní source-u introspectne schému (schema-explorer agent), paralelne pro
 
 Tieto tools registrujú subagenti Explore, nie Govern. Prístup k dátam cez Govern guarded wrappers alebo cez internal-adapter (pre profiling).
 
-- [ ] `detect_schema_changes` — porovná aktuálny snapshot s predchádzajúcim, uloží do `schema_changes`, vráti `{ added, removed, modified }` count
-- [ ] `run_profile_query` — pristupuje cez Govern `internal-adapter` (NIE priamo cez Connect adapter, NIE cez `guarded_run_select_query`); pred uložením do `top_values_json` aplikuje PII pre-filter (stĺpce kde `pii_candidate=true` alebo `column_permissions.pii_classification IS NOT NULL` sú redacted)
-- [ ] `detect_pii_candidates` — regex name-based heuristika na column names; `allowedCallers: ['data-profiler', 'schema-explorer']`
-- [ ] `suggest_reference_table_flags` — kritériá: `row_count < 10000 AND distinct_count/row_count < 0.8 AND pii_candidate=false` na žiadnom stĺpci; vráti zoznam table suggestions, **nepíše** priamo do DB (user musí potvrdiť)
-- [ ] `read_schema_snapshot` — čítanie konkrétneho snapshot_json (Layer 1 — žiadny permission check)
-- [ ] `read_profiles` — čítanie `table_profiles` + `column_profiles` (Layer 1 — žiadny permission check)
+- [x] `detect_schema_changes` — porovná aktuálny snapshot s predchádzajúcim, uloží do `schema_changes`, vráti `{ added, removed, modified }` count
+- [x] `run_profile_query` — pristupuje cez Govern `internal-adapter` (NIE priamo cez Connect adapter, NIE cez `guarded_run_select_query`); pred uložením do `top_values_json` aplikuje PII pre-filter (stĺpce kde `pii_candidate=true` alebo `column_permissions.pii_classification IS NOT NULL` sú redacted)
+- [x] `detect_pii_candidates` — regex name-based heuristika na column names; `allowedCallers: ['data-profiler', 'schema-explorer']`
+- [x] `suggest_reference_table_flags` — kritériá: `row_count < 10000 AND distinct_count/row_count < 0.8 AND pii_candidate=false` na žiadnom stĺpci; vráti zoznam table suggestions, **nepíše** priamo do DB (user musí potvrdiť)
+- [x] `read_schema_snapshot` — čítanie konkrétneho snapshot_json (Layer 1 — žiadny permission check)
+- [x] `read_profiles` — čítanie `table_profiles` + `column_profiles` (Layer 1 — žiadny permission check)
 
 ### 4.3 Phase Coordinator (`modules/ainderstanding/explore/agents/explore-coordinator.ts`)
 
@@ -92,23 +92,23 @@ Tieto tools registrujú subagenti Explore, nie Govern. Prístup k dátam cez Gov
 
 ### 4.4 Lib (`modules/ainderstanding/explore/lib/`)
 
-- [ ] `profile-runner.ts` — per-type stats queries:
+- [x] `profile-runner.ts` — per-type stats queries:
   - Numeric: COUNT, NULL count, MIN, MAX, AVG, percentiles (p25/p50/p75/p95)
   - String: NULL count, distinct count, avg/min/max length, length distribution
   - Date: NULL count, MIN date, MAX date, distinct count
   - All: top 20 distinct values (cez COUNT GROUP BY LIMIT 20) — PII pre-filter applies
-- [ ] `pii-heuristics.ts` — keyword/regex list na column names (BR-XPL-003: **iba name-based**, nikdy content-based):
+- [x] `pii-heuristics.ts` — keyword/regex list na column names (BR-XPL-003: **iba name-based**, nikdy content-based):
   - Exact match: `email`, `phone`, `ssn`, `ip_address`, `password`, `secret`, `token`
   - Contains: `birth`, `iban`, `account`, `card_num`, `credit`, `address`, `passport`, `license`
   - Suffix match: `_id` s `person`/`user`/`customer` prefix
   - Vráti `{ isPiiCandidate: boolean, reason: string }`
-- [ ] `sampling-strategy.ts` — SAMPLE 10% pre tabuľky nad `profile_sample_threshold_rows` (default 1M); DuckDB TABLESAMPLE SYSTEM syntax
-- [ ] `schema-differ.ts` — diff dvoch `SchemaSnapshot` JSON objektov; vráti `SchemaDiff { added, removed, modified }` s type-safe change records
+- [x] `sampling-strategy.ts` — SAMPLE 10% pre tabuľky nad `profile_sample_threshold_rows` (default 1M); DuckDB TABLESAMPLE SYSTEM syntax
+- [x] `schema-differ.ts` — diff dvoch `SchemaSnapshot` JSON objektov; vráti `SchemaDiff { added, removed, modified }` s type-safe change records
 
 ### 4.5 UI komponenty (`app/workspace/[workspaceId]/explore/`)
 
-- [ ] `page.tsx` — Explore landing s dvomi panelmi: SchemaExplorer (left) + detail (right)
-- [ ] `modules/ainderstanding/explore/components/SchemaExplorer.tsx` — tree view:
+- [x] `page.tsx` — Explore landing s dvomi panelmi: SchemaExplorer (left) + detail (right)
+- [x] `modules/ainderstanding/explore/components/SchemaExplorer.tsx` — tree view:
   - Koreň: data source name
   - Úroveň 2: tabuľky s row_count badge + reference_table chip
   - Klik → otvoriť TableDetailTab
@@ -116,18 +116,18 @@ Tieto tools registrujú subagenti Explore, nie Govern. Prístup k dátam cez Gov
 - [ ] `modules/ainderstanding/explore/components/TableDetailTab.tsx` — stĺpcový zoznam + data preview panel:
   - 3 stavy: Layer 2 DENY (zobrazí "Samples denied — not a reference table"), Reference allowed (sample grid), Layer 3 approval needed (tlačidlo "Request access")
 - [ ] `modules/ainderstanding/explore/components/ReferenceTableSampleView.tsx` — data grid pre reference table samples (max 100 riadkov, PII stĺpce masked)
-- [ ] `modules/ainderstanding/explore/components/ColumnProfileDetailTab.tsx`:
+- [x] `modules/ainderstanding/explore/components/ColumnProfileDetailTab.tsx`:
   - Distribučný histogram (lightweight-charts bar chart)
   - Top values zoznam (PII stĺpce: "[MASKED]")
   - Null rate progress bar
   - Min/max/mean badges
   - PII candidate warning chip ak `pii_candidate=true`
-- [ ] `modules/ainderstanding/explore/components/SchemaDiffViewer.tsx` — diff panel:
+- [x] `modules/ainderstanding/explore/components/SchemaDiffViewer.tsx` — diff panel:
   - Zelená: pridané tabuľky/stĺpce
   - Červená: zmazané
   - Žltá: zmenené typy
   - Timestamp + "Review changes" CTA
-- [ ] `modules/ainderstanding/explore/components/PIICandidatesPanel.tsx` — bottom panel:
+- [x] `modules/ainderstanding/explore/components/PIICandidatesPanel.tsx` — bottom panel:
   - Zoznam všetkých `pii_candidate=true` stĺpcov naprieč zdrojmi
   - Per-candidate: Confirm PII (→ otvorí Govern ClassifyColumn flow) / Dismiss
   - Badge count v SideNav Explore ikone
@@ -135,10 +135,10 @@ Tieto tools registrujú subagenti Explore, nie Govern. Prístup k dátam cez Gov
 
 ## 5. GDPR / Safety pravidlá (z RULES.md)
 
-- [ ] BR-XPL-001: Explore nikdy nepristupuje k dátam priamo cez Connect adapter (len cez Govern wrappers alebo internal-adapter)
-- [ ] BR-XPL-002: sample dáta default DENY — iba reference tables alebo per-query Layer 3 approval
-- [ ] BR-XPL-003: PII detection iba name-based — content-based by porušilo GDPR-first (napr. scan SSN values)
-- [ ] BR-XPL-004: PII candidate = suggestion — Govern enforce (BR-GOV-032); Explore nikdy samo nepíše do `column_permissions`
+- [x] BR-XPL-001: Explore nikdy nepristupuje k dátam priamo cez Connect adapter (len cez Govern wrappers alebo internal-adapter)
+- [x] BR-XPL-002: sample dáta default DENY — iba reference tables alebo per-query Layer 3 approval
+- [x] BR-XPL-003: PII detection iba name-based — content-based by porušilo GDPR-first (napr. scan SSN values)
+- [x] BR-XPL-004: PII candidate = suggestion — Govern enforce (BR-GOV-032); Explore nikdy samo nepíše do `column_permissions`
 - [ ] BR-XPL-030: reference flag user-controlled — `suggest_reference_table_flags` iba navrhuje, user potvrdzuje v UI
 - [ ] BR-XPL-050: PII review workflow — user musí potvrdiť každý candidate v PIICandidatesPanel predtým než ide do Govern
 - [ ] `top_values_json`: PII stĺpce (kde `pii_candidate=true`) sú redacted pred uložením do DB — `"[REDACTED]"` namiesto hodnôt

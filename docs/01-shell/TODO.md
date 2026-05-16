@@ -150,6 +150,27 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 - [x] `hooks: supervisorHooks` — z `core/orchestration/hooks.ts`; registruje `PostToolUse` pre deterministický post-processing
 - [x] Streaming response → SSE emit každého chunk cez `sseEmitter.emit(workspaceId, event)`
 
+### 4.9 Settings Dialog (`modules/ainderstanding/shell/components/settings/`)
+
+- [x] `useWorkspaceStore` rozšírený o `settingsOpen`, `activeSettingsSection`, `openSettings`, `closeSettings`, `setActiveSettingsSection`
+- [x] `useKeyboardShortcuts` — ⌘, otvára Settings dialog
+- [x] `TopBar.tsx` — Settings button napojený na `openSettings()`
+- [x] `ActivityBar.tsx` — Settings ActivityItem napojený na `openSettings()`
+- [x] `SettingsDialog.tsx` — Dialog 860×580, 2-col layout (SettingsSidebar + ScrollArea content)
+- [x] `SettingsSidebar.tsx` — 8 sekcií, active state highlight
+- [x] `useSettingsPatch.ts` — debounced (400ms) PATCH, optimistic update, Sonner error toast
+- [x] `sections/AIBehaviorSection.tsx` — Default AI mode (PATCH /workspaces/[id]), Show tool calls, [Polish] x3
+- [x] `sections/ApprovalGatesSection.tsx` — placeholder (defer na G1)
+- [x] `sections/DataProfilingSection.tsx` — 3 boolean + 2 [Polish] numeric
+- [x] `sections/ModelsSqlSection.tsx` — 2 numeric
+- [x] `sections/DocumentationSection.tsx` — auto-write, verbosity, confidence, sample data
+- [x] `sections/TestingSection.tsx` — 2 boolean + 3 [Polish] numeric
+- [x] `sections/ConnectionsSection.tsx` — query timeout + info hint
+- [x] `sections/UiUxSection.tsx` — dark mode grayed-out, info o panel persistencii
+- [x] `widgets/SettingRow.tsx`, `SettingNumber.tsx`, `SettingRadio.tsx`, `SettingSelect.tsx`
+- [x] `app/api/workspaces/[workspaceId]/settings/route.ts` — ALLOWED_FIELDS opravené (pridané testParallelConcurrency, includeSampleDataInDocs, chatHistoryRetentionCount)
+- [x] `app/api/workspaces/[workspaceId]/route.ts` — PATCH handler pre aiMode
+
 ### 4.8 Hooks (`core/orchestration/hooks.ts`)
 
 - [x] Vytvoriť `core/orchestration/hooks.ts` s exportom `supervisorHooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>`
