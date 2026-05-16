@@ -62,7 +62,9 @@ async function main() {
     const conn = await duck.connect();
     await conn.run(`INSTALL sqlite; LOAD sqlite;`);
     await conn.run(`ATTACH '${tmpSqlite}' AS src (TYPE SQLITE, READ_ONLY TRUE);`);
-    const tables = await conn.all(`SELECT name FROM src.sqlite_master WHERE type='table';`);
+    const tables = await conn.all(
+      `SELECT table_name AS name FROM information_schema.tables WHERE table_catalog = 'src' AND table_type = 'BASE TABLE'`,
+    );
     for (const { name } of tables as { name: string }[]) {
       await conn.run(`CREATE TABLE IF NOT EXISTS "${name}" AS SELECT * FROM src.main."${name}";`);
     }

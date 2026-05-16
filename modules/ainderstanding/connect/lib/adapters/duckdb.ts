@@ -53,7 +53,7 @@ export class DuckDbAdapter implements SourceAdapter {
     const db = await this.openDb();
     try {
       const schemasRes = (await db.all(
-        `SELECT schema_name FROM information_schema.schemata
+        `SELECT DISTINCT schema_name FROM information_schema.schemata
          WHERE schema_name NOT IN ('information_schema','pg_catalog')`,
       )) as RowData[];
 
