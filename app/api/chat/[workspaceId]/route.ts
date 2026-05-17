@@ -8,7 +8,8 @@ import { sseEmitter } from '@/core/orchestration/streaming';
 import { createSession, getActiveSession, endSession } from '@/modules/ainderstanding/shell/lib/session-manager';
 import { createSupervisor, type SupervisorContext, type QuerySessionSummary } from '@/modules/ainderstanding/shell/orchestrator';
 import { getOpenSessions } from '@/modules/ainderstanding/explore/lib/query-sessions';
-import { getSource } from '@/modules/ainderstanding/connect/lib/data-source-service';
+import { getSource, listSources } from '@/modules/ainderstanding/connect/lib/data-source-service';
+import { readSchemaSnapshot } from '@/modules/ainderstanding/explore/lib/mcp-tools';
 import { createSupervisorState, cleanupSupervisorState } from '@/modules/ainderstanding/shell/lib/supervisor-state';
 import { runPostProcessing } from '@/modules/ainderstanding/shell/lib/post-processing';
 import type { ActorName, AIMode } from '@/core/types/agent';
@@ -17,6 +18,28 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_MESSAGE_LENGTH = 4000; // BR-SHL-005
+const MAX_TABLES_IN_SUMMARY = 30;
+
+function buildSourcesSummary(workspaceId: string): string {
+  const sources = listSources(workspaceId);
+  if (sources.length === 0) return 'No sources connected yet.';
+
+  const lines: string[] = [`Connected sources (${sources.length}):`];
+  for (const s of sources) {
+    const snap = readSchemaSnapshot(s.id);
+    if (!snap || snap.tables.length === 0) {
+      lines.push(`- ${s.name} (${s.dbType}, status: ${s.status}) — schema not yet introspected`);
+      continue;
+    }
+    const shown = snap.tables.slice(0, MAX_TABLES_IN_SUMMARY);
+    const list = shown.map((t) => `${t.name} (${t.columns.length} cols)`).join(', ');
+    const more = snap.tables.length > MAX_TABLES_IN_SUMMARY
+      ? ` … +${snap.tables.length - MAX_TABLES_IN_SUMMARY} more` : '';
+    lines.push(`- ${s.name} (${s.dbType}, status: ${s.status})`);
+    lines.push(`  Tables (${snap.tables.length}): ${list}${more}`);
+  }
+  return lines.join('\n');
+}
 
 type ChatRequestBody = {
   message: string;
@@ -142,7 +165,7 @@ export async function POST(
     sessionId: session.sessionId,
     activeModule,
     aiMode: workspace.aiMode as AIMode,
-    sourcesSummary: 'No sources connected yet.',
+    sourcesSummary: buildSourcesSummary(workspaceId),
     querySessions: querySessionsCtx,
   };
 

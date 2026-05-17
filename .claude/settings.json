@@ -19,6 +19,8 @@
       "NotebookEdit",
       "PushNotification",
       "Read",
+      "Read(/Users/lukaspjecha/Documents/AIBIo/node_modules/@anthropic-ai/**)",
+      "Read(/Users/lukaspjecha/Documents/AIBIo/node_modules/@modelcontextprotocol/**)",
       "ScheduleWakeup",
       "Skill",
       "TaskCreate",

@@ -1,98 +1,85 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-  ErrorCode,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
 import { getAllTools, getTool } from './tool-registry';
 import { getAgentContext, withAgentContext } from './context';
 import type { AgentContext } from './context';
 
-type McpInstance = { server: Server; client: Client };
+type PropSchema = { type?: string; description?: string; enum?: unknown[] };
+
+function propToZod(schema: PropSchema): z.ZodTypeAny {
+  if (schema.enum && Array.isArray(schema.enum) && schema.enum.length > 0) {
+    if (schema.enum.every((v) => typeof v === 'string')) {
+      const values = schema.enum as [string, ...string[]];
+      const e = z.enum(values);
+      return schema.description ? e.describe(schema.description) : e;
+    }
+  }
+  const base = ((): z.ZodTypeAny => {
+    switch (schema.type) {
+      case 'string': return z.string();
+      case 'number':
+      case 'integer': return z.number();
+      case 'boolean': return z.boolean();
+      case 'array': return z.array(z.unknown());
+      case 'object': return z.record(z.string(), z.unknown());
+      default: return z.unknown();
+    }
+  })();
+  return schema.description ? base.describe(schema.description) : base;
+}
+
+function buildZodShape(
+  properties: Record<string, unknown>,
+  required: Set<string>,
+): z.ZodRawShape {
+  const shape: z.ZodRawShape = {};
+  for (const [k, v] of Object.entries(properties)) {
+    const zodField = propToZod(v as PropSchema);
+    shape[k] = required.has(k) ? zodField : zodField.optional();
+  }
+  return shape;
+}
 
 declare global {
   // eslint-disable-next-line no-var
-  var __aibio_mcp: Promise<McpInstance> | undefined;
+  var __aibio_mcp_sdk: ReturnType<typeof createSdkMcpServer> | undefined;
 }
 
-async function createInstance(): Promise<McpInstance> {
-  const server = new Server(
-    { name: 'aibio', version: '0.1.0' },
-    { capabilities: { tools: {} } },
-  );
+export function getMcpServer(): ReturnType<typeof createSdkMcpServer> {
+  if (global.__aibio_mcp_sdk) return global.__aibio_mcp_sdk;
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: getAllTools().map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    })),
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const def = getTool(request.params.name);
-    if (!def) {
-      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
-    }
-
-    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
-
-    // AgentContext propagates via AsyncLocalStorage through InMemoryTransport's
-    // synchronous message passing + Promise microtask chain. getAgentContext()
-    // is safe here because callTool() below wraps its caller in withAgentContext().
-    const ctx = getAgentContext();
-
-    // CR-MCP-002 / CR-MCP-004: enforce allowedCallers at runtime
-    const callerName = ctx?.agentName;
-    if (callerName !== undefined && !def.allowedCallers.includes(callerName)) {
-      return {
-        isError: true,
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            error: 'PERMISSION_DENIED',
-            message: `Tool "${request.params.name}" is not allowed for agent "${callerName}". Allowed: ${def.allowedCallers.join(', ')}`,
-          }),
-        }],
-      };
-    }
-
-    try {
-      const result = await def.handler(args, ctx);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new McpError(ErrorCode.InternalError, message);
-    }
+  global.__aibio_mcp_sdk = createSdkMcpServer({
+    name: 'aibio',
+    version: '0.1.0',
+    tools: getAllTools().map((def) => {
+      const required = new Set(def.inputSchema.required ?? []);
+      const shape = buildZodShape(def.inputSchema.properties, required);
+      return tool(
+        def.name,
+        def.description,
+        shape,
+        async (args) => {
+          const ctx = getAgentContext();
+          if (ctx && !def.allowedCallers.includes(ctx.agentName)) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({
+                  error: 'PERMISSION_DENIED',
+                  message: `Tool "${def.name}" is not allowed for agent "${ctx.agentName}". Allowed: ${def.allowedCallers.join(', ')}`,
+                }),
+              }],
+              isError: true,
+            };
+          }
+          const result = await def.handler(args as Record<string, unknown>, ctx!);
+          return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+        },
+      );
+    }),
   });
 
-  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverTransport);
-
-  const client = new Client({ name: 'aibio-client', version: '0.1.0' });
-  await client.connect(clientTransport);
-
-  return { server, client };
-}
-
-function getMcpInstance(): Promise<McpInstance> {
-  if (!global.__aibio_mcp) {
-    global.__aibio_mcp = createInstance().catch((err) => {
-      global.__aibio_mcp = undefined;
-      throw err;
-    });
-  }
-  return global.__aibio_mcp;
-}
-
-export async function getMcpServer(): Promise<Server> {
-  const { server } = await getMcpInstance();
-  return server;
+  return global.__aibio_mcp_sdk;
 }
 
 export async function callTool<TOutput = unknown>(
@@ -100,22 +87,12 @@ export async function callTool<TOutput = unknown>(
   args: Record<string, unknown>,
   ctx: AgentContext,
 ): Promise<TOutput> {
-  return withAgentContext(ctx, async () => {
-    const { client } = await getMcpInstance();
-
-    const result = await client.callTool({ name, arguments: args });
-
-    const content = result.content as Array<{ type: string; text: string }>;
-    const text = content[0]?.text;
-    if (text === undefined) {
-      throw new Error(`Tool "${name}" returned empty content`);
-    }
-
-    if (result.isError) {
-      const parsed = JSON.parse(text) as { error: string; message: string };
-      throw new Error(parsed.message ?? text);
-    }
-
-    return JSON.parse(text) as TOutput;
-  });
+  const def = getTool(name);
+  if (!def) throw new Error(`Unknown tool: ${name}`);
+  if (!def.allowedCallers.includes(ctx.agentName)) {
+    throw new Error(
+      `Tool "${name}" is not allowed for agent "${ctx.agentName}". Allowed: ${def.allowedCallers.join(', ')}`,
+    );
+  }
+  return withAgentContext(ctx, () => def.handler(args, ctx) as Promise<TOutput>);
 }
