@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger, ScrollArea, Button } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
+import { QueryResultView } from '@/modules/ainderstanding/explore/components/query-result/QueryResultView';
 
 type HistoryRow = {
   id: string;
@@ -15,8 +16,9 @@ type HistoryRow = {
 };
 
 export function BottomPanel() {
-  const [activeTab, setActiveTab] = useState<'output' | 'sql' | 'results' | 'approvals'>('output');
   const toggle = useWorkspaceStore((s) => s.toggleBottomPanel);
+  const activeTab = useWorkspaceStore((s) => s.bottomPanelTab);
+  const setActiveTab = useWorkspaceStore((s) => s.setBottomPanelTab);
   const messages = useWorkspaceStore((s) => s.messages);
   const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [sqlHistory, setSqlHistory] = useState<HistoryRow[]>([]);
@@ -107,9 +109,7 @@ export function BottomPanel() {
         </TabsContent>
 
         <TabsContent value="results" className="mt-0 min-h-0 flex-1">
-          <ScrollArea className="h-full p-2">
-            <p className="text-caption italic text-muted-foreground">No query results.</p>
-          </ScrollArea>
+          <QueryResultView />
         </TabsContent>
 
         <TabsContent value="approvals" className="mt-0 min-h-0 flex-1">

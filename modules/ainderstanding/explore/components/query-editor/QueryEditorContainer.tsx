@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Database } from 'lucide-react';
+import { Database, Play } from 'lucide-react';
 import { QueryTabBar } from './QueryTabBar';
 import { SqlEditor } from './SqlEditor';
-import { QueryResultPanel } from './QueryResultPanel';
+import { Button } from '@/core/ui';
 import { useExploreStore } from '../../store/explore-store';
+import { useWorkspaceStore } from '@/modules/ainderstanding/shell/store/workspace-store';
 import type { ExploreSource } from '../../lib/explore-data';
 
 type Session = {
@@ -39,7 +40,6 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(initialSessions.map((s) => [s.id, s.sqlDraft])),
   );
-  const [triggerRun, setTriggerRun] = useState(0);
   const draftTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -74,6 +74,10 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
     if (activeSessionId_) setActiveQuerySessionId(activeSessionId_);
   }, [activeSessionId_, setActiveQuerySessionId]);
 
+  const running = useExploreStore(
+    (s) => (activeSession ? s.querySessions[activeSession.id]?.running ?? false : false),
+  );
+
   const switchTab = useCallback(
     (id: string) => {
       const params = new URLSearchParams(sp.toString());
@@ -88,6 +92,7 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
   const closeTab = useCallback(
     async (id: string) => {
       await fetch(`/api/explore/${workspaceId}/sessions/${id}`, { method: 'DELETE' });
+      useExploreStore.getState().clearQueryState(id);
       const remaining = sessionsRef.current.filter((s) => s.id !== id);
       setSessions(remaining);
       const params = new URLSearchParams(sp.toString());
@@ -122,9 +127,36 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
     [activeSession, workspaceId],
   );
 
-  const handleRun = useCallback(() => {
-    setTriggerRun((n) => n + 1);
-  }, []);
+  const handleRun = useCallback(async () => {
+    if (!activeSession) return;
+    const sessionId = activeSession.id;
+    const sql = activeDraft;
+    if (!sql.trim()) return;
+
+    const exploreStore = useExploreStore.getState();
+    if (exploreStore.querySessions[sessionId]?.running) return;
+
+    useWorkspaceStore.getState().setBottomPanelOpen(true);
+    useWorkspaceStore.getState().setBottomPanelTab('results');
+
+    exploreStore.startQuery(sessionId, sql, activeSession.dataSourceId);
+
+    try {
+      const res = await fetch(`/api/explore/${workspaceId}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, sourceId: activeSession.dataSourceId, sql }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        useExploreStore.getState().setQueryError(sessionId, data);
+      } else {
+        useExploreStore.getState().setQueryResult(sessionId, data);
+      }
+    } catch (e) {
+      useExploreStore.getState().setQueryError(sessionId, { error: 'query_failed', detail: String(e) });
+    }
+  }, [activeSession, activeDraft, workspaceId]);
 
   useEffect(() => {
     return () => {
@@ -149,16 +181,28 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
         onClose={closeTab}
       />
 
-      {/* Source badge */}
-      {activeSource && (
-        <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border px-3 bg-muted/10">
-          <Database className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{activeSource.name}</span>
-        </div>
-      )}
+      {/* Source badge + Run button */}
+      <div className="flex h-6 shrink-0 items-center gap-1.5 border-b border-border px-3 bg-muted/10">
+        {activeSource && (
+          <>
+            <Database className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">{activeSource.name}</span>
+          </>
+        )}
+        <Button
+          size="sm"
+          variant="default"
+          className="ml-auto h-5 text-[11px] gap-1 px-1.5"
+          disabled={running || !activeDraft.trim()}
+          onClick={handleRun}
+        >
+          <Play className="h-2.5 w-2.5" />
+          {running ? 'Running…' : 'Run'}
+        </Button>
+      </div>
 
-      {/* Editor — 50% height */}
-      <div className="min-h-0 flex-1 flex flex-col" style={{ flexBasis: '50%' }}>
+      {/* Editor — full height */}
+      <div className="min-h-0 flex-1">
         <SqlEditor
           key={activeSession.id}
           value={activeDraft}
@@ -167,17 +211,6 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
           workspaceId={workspaceId}
           sourceId={activeSession.dataSourceId}
           sessionId={activeSession.id}
-        />
-      </div>
-
-      {/* Results panel — 50% height */}
-      <div className="min-h-0 flex-1 flex flex-col" style={{ flexBasis: '50%' }}>
-        <QueryResultPanel
-          sessionId={activeSession.id}
-          sourceId={activeSession.dataSourceId}
-          workspaceId={workspaceId}
-          sql={activeDraft}
-          triggerRun={triggerRun}
         />
       </div>
     </div>

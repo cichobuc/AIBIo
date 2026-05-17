@@ -1,84 +1,31 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Play, Download, AlertTriangle, Clock, Info } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Download, AlertTriangle, Clock, Info, Loader2 } from 'lucide-react';
 import { Button, ScrollArea, Badge } from '@/core/ui';
+import { useExploreStore } from '../../store/explore-store';
+import { useWorkspaceStore } from '@/modules/ainderstanding/shell/store/workspace-store';
 
-type QueryResult = {
-  columns: string[];
-  rows: Record<string, unknown>[];
-  rowCount: number;
-  durationMs: number;
-  truncated: boolean;
-  historyId: string;
-};
-
-type QueryError = {
-  error: string;
-  reason?: string;
-  offendingTables?: string[];
-  detail?: string;
-};
-
-type Props = {
-  sessionId: string;
-  sourceId: string;
-  workspaceId: string;
-  sql: string;
-  triggerRun?: number;
-  onResult?: (result: QueryResult) => void;
-};
-
-export function QueryResultPanel({ sessionId, sourceId, workspaceId, sql, triggerRun, onResult }: Props) {
-  const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [error, setError] = useState<QueryError | null>(null);
+export function QueryResultView() {
+  const activeSessionId = useExploreStore((s) => s.activeQuerySessionId);
+  const sessionState = useExploreStore((s) =>
+    activeSessionId ? s.querySessions[activeSessionId] ?? null : null,
+  );
+  const workspaceId = useWorkspaceStore((s) => s.workspaceId);
   const [exporting, setExporting] = useState(false);
-  const isRunningRef = useRef(false);
-
-  const handleRun = useCallback(async () => {
-    if (!sql.trim() || isRunningRef.current) return;
-    isRunningRef.current = true;
-    setRunning(true);
-    setError(null);
-    setResult(null);
-
-    try {
-      const res = await fetch(`/api/explore/${workspaceId}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, sourceId, sql }),
-      });
-      const data = await res.json() as QueryResult & QueryError;
-
-      if (!res.ok) {
-        setError(data);
-      } else {
-        setResult(data);
-        onResult?.(data);
-      }
-    } catch (e) {
-      setError({ error: 'query_failed', detail: String(e) });
-    } finally {
-      setRunning(false);
-      isRunningRef.current = false;
-    }
-  }, [sessionId, sourceId, workspaceId, sql, onResult]);
-
-  // Ctrl+Enter from SqlEditor increments triggerRun → trigger run
-  useEffect(() => {
-    if (triggerRun && triggerRun > 0) handleRun();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerRun]);
 
   const handleExport = useCallback(async () => {
-    if (!result || exporting) return;
+    if (!sessionState?.result || exporting || !activeSessionId) return;
     setExporting(true);
     try {
       const res = await fetch(`/api/explore/${workspaceId}/query/export-csv`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, sourceId, sql }),
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          sourceId: sessionState.sourceId,
+          sql: sessionState.sql,
+        }),
       });
       if (res.ok) {
         const blob = await res.blob();
@@ -92,23 +39,21 @@ export function QueryResultPanel({ sessionId, sourceId, workspaceId, sql, trigge
     } finally {
       setExporting(false);
     }
-  }, [result, exporting, sessionId, sourceId, workspaceId, sql]);
+  }, [sessionState, exporting, activeSessionId, workspaceId]);
+
+  const { running, result, error } = sessionState ?? { running: false, result: null, error: null };
 
   return (
-    <div className="flex h-full flex-col border-t border-border">
+    <div className="flex h-full flex-col">
       {/* Toolbar */}
       <div className="flex h-8 shrink-0 items-center justify-between border-b border-border bg-muted/30 px-2 gap-2">
-        <Button
-          size="sm"
-          variant="default"
-          className="h-6 text-xs gap-1.5 px-2"
-          disabled={running || !sql.trim()}
-          onClick={handleRun}
-        >
-          <Play className="h-3 w-3" />
-          {running ? 'Running…' : 'Run'}
-        </Button>
         <div className="flex items-center gap-2">
+          {running && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Running…
+            </span>
+          )}
           {result && (
             <>
               <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -123,31 +68,33 @@ export function QueryResultPanel({ sessionId, sourceId, workspaceId, sql, trigge
                   truncated
                 </Badge>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 text-xs gap-1 px-2"
-                disabled={exporting}
-                onClick={handleExport}
-              >
-                <Download className="h-3 w-3" />
-                CSV
-              </Button>
             </>
           )}
         </div>
+        {result && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 text-xs gap-1 px-2"
+            disabled={exporting}
+            onClick={handleExport}
+          >
+            <Download className="h-3 w-3" />
+            CSV
+          </Button>
+        )}
       </div>
 
       {/* Content */}
       <div className="min-h-0 flex-1">
-        {!result && !error && (
+        {!running && !result && !error && (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground gap-1">
             <Info className="h-3.5 w-3.5" />
-            Press Run or Ctrl+Enter to execute
+            Press Run or Ctrl+Enter in the editor to execute
           </div>
         )}
 
-        {error && (
+        {!running && error && (
           <div className="p-3 flex items-start gap-2 text-xs text-destructive bg-destructive/5">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <div className="space-y-0.5">

@@ -88,7 +88,7 @@ Riadiaca vrstva AInderstandingu. Rieši routing a navigáciu, GlobalChatPanel (j
 - [x] `ApprovalDialog.tsx` — Level 2 (BottomBanner fixed) + Level 3 (AlertDialog) s countdown timerom; POST na `/api/approvals/[requestId]`
 - [x] `TopBar.tsx` — breadcrumb (workspaceId/module), ModeSelector, Settings/Help buttons, Avatar
 - [x] `StatusBar.tsx` — mode colored dot, active agent + spinner, workspace name, ⌘K hint
-- [x] `BottomPanel.tsx` — toggle (⌘J), Tabs: output/sql/results/approvals
+- [x] `BottomPanel.tsx` — toggle (⌘J), Tabs: output/sql/results/approvals; `results` tab zobrazuje `QueryResultView` (live SQL výsledky zo `useExploreStore` per-session); `activeTab` riadený cez `workspace-store.bottomPanelTab`
 - [x] `CommandPalette.tsx` — ⌘K dialog, Navigation/AI/Actions sekcie
 - [x] `PrimarySidebar.tsx` — per-modul navigátor cez Next.js parallel routes (`@sidebar` slot); Connect: SourcesSidebar (sources tree, status dots, table counts, Test connection); Explore: SchemaExplorer; ostatné moduly: placeholder
 - [x] `ActiveAgentsBadge.tsx`, `ContextBar.tsx`, `ChatInput.tsx`, `ToolCallChip.tsx`, `ApprovalRequiredCard.tsx`

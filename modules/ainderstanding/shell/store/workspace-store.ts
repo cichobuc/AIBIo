@@ -9,6 +9,8 @@ type PendingApproval = Extract<SSEEvent, { type: 'approval_required' }>['payload
 
 type ActiveAgent = { agentName: string; message: string };
 
+export type BottomPanelTab = 'output' | 'sql' | 'results' | 'approvals';
+
 export type SettingsSection =
   | 'ai-behavior'
   | 'approval-gates'
@@ -28,6 +30,7 @@ interface WorkspaceState {
   sidebarOpen: boolean;
   chatPanelOpen: boolean;
   bottomPanelOpen: boolean;
+  bottomPanelTab: BottomPanelTab;
 
   settingsOpen: boolean;
   activeSettingsSection: SettingsSection;
@@ -48,6 +51,7 @@ interface WorkspaceActions {
   setSidebarOpen: (open: boolean) => void;
   setChatPanelOpen: (open: boolean) => void;
   setBottomPanelOpen: (open: boolean) => void;
+  setBottomPanelTab: (tab: BottomPanelTab) => void;
 
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
@@ -73,6 +77,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       sidebarOpen: true,
       chatPanelOpen: true,
       bottomPanelOpen: false,
+      bottomPanelTab: 'output',
 
       settingsOpen: false,
       activeSettingsSection: 'ai-behavior',
@@ -91,6 +96,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
       setBottomPanelOpen: (open) => set({ bottomPanelOpen: open }),
+      setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
 
       openSettings: (section) => set({ settingsOpen: true, activeSettingsSection: section ?? 'ai-behavior' }),
       closeSettings: () => set({ settingsOpen: false }),
@@ -117,6 +123,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         sidebarOpen: state.sidebarOpen,
         chatPanelOpen: state.chatPanelOpen,
         bottomPanelOpen: state.bottomPanelOpen,
+        bottomPanelTab: state.bottomPanelTab,
       }),
     },
   ),
