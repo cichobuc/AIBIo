@@ -16,6 +16,9 @@ type Session = {
   dataSourceId: string;
   title: string | null;
   sqlDraft: string;
+  sqlBaseline: string | null;
+  hasUnrevertedAgentEdit: boolean;
+  lastAgentEditAt: string | null;
   isClosed: boolean;
   createdAt: string;
   updatedAt: string;
@@ -60,13 +63,29 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
     }));
   }, [initialSessions]);
 
+  // Listen to SSE query_session_updated events
+  const lastQuerySessionUpdate = useWorkspaceStore((s) => s.lastQuerySessionUpdate);
+  useEffect(() => {
+    if (!lastQuerySessionUpdate) return;
+    const { sessionId, sqlDraft, hasUnrevertedAgentEdit } = lastQuerySessionUpdate;
+    setSessions((prev) =>
+      prev.map((s) => s.id === sessionId ? { ...s, sqlDraft, hasUnrevertedAgentEdit } : s),
+    );
+    setDrafts((prev) => ({ ...prev, [sessionId]: sqlDraft }));
+  }, [lastQuerySessionUpdate]);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? null;
   const activeDraft = activeSession ? (drafts[activeSession.id] ?? activeSession.sqlDraft) : '';
   const activeSource = activeSession
     ? sources.find((s) => s.id === activeSession.dataSourceId) ?? null
     : null;
 
-  const tabs = sessions.map((s, i) => ({ id: s.id, title: s.title, index: i }));
+  const tabs = sessions.map((s, i) => ({
+    id: s.id,
+    title: s.title,
+    index: i,
+    hasUnrevertedAgentEdit: s.hasUnrevertedAgentEdit,
+  }));
 
   // Persist active session into store so ExplorePageClient can restore it on re-mount
   const activeSessionId_ = activeSession?.id ?? null;
@@ -109,6 +128,19 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
     [workspaceId, router, sp, setActiveQuerySessionId],
   );
 
+  const revertTab = useCallback(
+    async (id: string) => {
+      const res = await fetch(`/api/explore/${workspaceId}/sessions/${id}/revert`, { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json() as { sqlDraft: string; hasUnrevertedAgentEdit: boolean };
+      setSessions((prev) =>
+        prev.map((s) => s.id === id ? { ...s, sqlDraft: data.sqlDraft, hasUnrevertedAgentEdit: data.hasUnrevertedAgentEdit, sqlBaseline: null } : s),
+      );
+      setDrafts((prev) => ({ ...prev, [id]: data.sqlDraft }));
+    },
+    [workspaceId],
+  );
+
   const handleDraftChange = useCallback(
     (sql: string) => {
       if (!activeSession) return;
@@ -122,6 +154,10 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sqlDraft: sql }),
         }).catch(() => {});
+        // Clear local agent-edit indicator on user save
+        setSessions((prev) =>
+          prev.map((s) => s.id === id ? { ...s, hasUnrevertedAgentEdit: false, sqlBaseline: null } : s),
+        );
       }, DRAFT_DEBOUNCE_MS);
     },
     [activeSession, workspaceId],
@@ -179,6 +215,7 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
         activeId={activeSession.id}
         onSelect={switchTab}
         onClose={closeTab}
+        onRevert={revertTab}
       />
 
       {/* Source badge + Run button */}

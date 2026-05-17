@@ -7,6 +7,7 @@ import { ShareResultsGate } from './approval/ShareResultsGate';
 import { WriteFileGate } from './approval/WriteFileGate';
 import { WriteDocsGate } from './approval/WriteDocsGate';
 import { SqlDiffApprovalDialog } from '../../model/components/SqlDiffApprovalDialog';
+import { SqlDiffDialog } from '@/core/ui/sql-diff-dialog';
 
 function useCountdown(timeoutAt: string | undefined): { display: string; remaining: number } {
   const [remaining, setRemaining] = useState(300);
@@ -130,6 +131,24 @@ export function ApprovalDialog() {
         countdown={countdown}
         remainingSec={remaining}
         onApprove={(reason) => void approve(reason)}
+        onDeny={() => void deny()}
+      />
+    );
+  }
+
+  if (gateType === 'edit_query_session') {
+    const d = details as { sessionId: string; sessionTitle: string; dataSourceName: string; previousSql: string; newSql: string };
+    return (
+      <SqlDiffDialog
+        agentName={agentName}
+        title="Edit Query Card"
+        subtitle={`${d.sessionTitle} · ${d.dataSourceName}`}
+        newSql={d.newSql}
+        previousSql={d.previousSql}
+        countdown={countdown}
+        remainingSec={remaining}
+        approveLabel="Approve & Apply"
+        onApprove={(finalSql) => void approve(finalSql)}
         onDeny={() => void deny()}
       />
     );

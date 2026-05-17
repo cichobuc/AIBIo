@@ -8,6 +8,15 @@ import {
   suggestReferenceTableFlags,
   runProfileQuery,
 } from './mcp-tools';
+import {
+  getOpenSessions,
+  getSession,
+  applyAgentEdit,
+} from './query-sessions';
+import { getSource } from '@/modules/ainderstanding/connect/lib/data-source-service';
+import { awaitApproval } from '@/core/orchestration/approval-gate';
+import { getAgentContext } from '@/core/orchestration/context';
+import { sseEmitter } from '@/core/orchestration/streaming';
 import type { SchemaSnapshot } from '@/core/types/workspace';
 
 export function registerExploreTools(): void {
@@ -149,6 +158,133 @@ export function registerExploreTools(): void {
       } finally {
         await adapter.close();
       }
+    },
+  });
+
+  registerTool({
+    name: 'mcp__aibio__list_query_sessions',
+    description: 'List all open SQL query cards (sessions) in the current workspace. Returns the active card and any other open cards. Use this to understand what the user has open before proposing edits.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspaceId: { type: 'string' },
+      },
+      required: ['workspaceId'],
+    },
+    allowedCallers: ['query-card-editor', 'supervisor'],
+    requiresApproval: null,
+    handler: async ({ workspaceId }) => {
+      const ctx = getAgentContext();
+      const sessions = getOpenSessions(workspaceId as string);
+      return sessions.map((s) => {
+        let sourceName = s.dataSourceId;
+        try {
+          sourceName = getSource(s.dataSourceId).name;
+        } catch {}
+        return {
+          id: s.id,
+          title: s.title ?? null,
+          dataSourceId: s.dataSourceId,
+          dataSourceName: sourceName,
+          sqlDraft: s.sqlDraft,
+          hasUnrevertedAgentEdit: s.hasUnrevertedAgentEdit,
+          isActive: s.id === ctx.activeQuerySessionId,
+        };
+      });
+    },
+  });
+
+  registerTool({
+    name: 'mcp__aibio__read_query_session',
+    description: 'Read the full SQL content of a specific query card by session ID. Use this to inspect a non-active card before editing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspaceId: { type: 'string' },
+        sessionId: { type: 'string' },
+      },
+      required: ['workspaceId', 'sessionId'],
+    },
+    allowedCallers: ['query-card-editor', 'supervisor'],
+    requiresApproval: null,
+    handler: async ({ workspaceId, sessionId }) => {
+      const session = getSession(sessionId as string, workspaceId as string);
+      if (!session) return { error: 'SESSION_NOT_FOUND' };
+      let sourceName = session.dataSourceId;
+      try {
+        sourceName = getSource(session.dataSourceId).name;
+      } catch {}
+      return {
+        id: session.id,
+        title: session.title ?? null,
+        dataSourceId: session.dataSourceId,
+        dataSourceName: sourceName,
+        sqlDraft: session.sqlDraft,
+        sqlBaseline: session.sqlBaseline,
+        hasUnrevertedAgentEdit: session.hasUnrevertedAgentEdit,
+        lastAgentEditAt: session.lastAgentEditAt,
+      };
+    },
+  });
+
+  registerTool({
+    name: 'mcp__aibio__edit_query_session',
+    description: 'Propose and apply an edit to an open SQL query card. Requires user approval via diff dialog. The user can modify the SQL before approving. Always explain the rationale for the change.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workspaceId: { type: 'string' },
+        sessionId: { type: 'string', description: 'ID of the query session to edit' },
+        proposedSql: { type: 'string', description: 'The new SQL content to propose' },
+        rationale: { type: 'string', description: 'Brief explanation of what was changed and why' },
+      },
+      required: ['workspaceId', 'sessionId', 'proposedSql', 'rationale'],
+    },
+    allowedCallers: ['query-card-editor'],
+    requiresApproval: 'edit_query_session',
+    handler: async ({ workspaceId, sessionId, proposedSql }) => {
+      const session = getSession(sessionId as string, workspaceId as string);
+      if (!session) return { error: 'SESSION_NOT_FOUND' };
+
+      let sourceName = session.dataSourceId;
+      try {
+        sourceName = getSource(session.dataSourceId).name;
+      } catch {}
+
+      const ctx = getAgentContext();
+      const sessionTitle = session.title ?? `Query Card`;
+
+      const { promise } = awaitApproval('edit_query_session', {
+        sessionId: session.id,
+        sessionTitle,
+        dataSourceName: sourceName,
+        previousSql: session.sqlDraft,
+        newSql: proposedSql as string,
+      });
+
+      const result = await promise;
+      if (result.decision === 'denied') {
+        return { ok: false, reason: 'denied' };
+      }
+
+      // Use user-edited SQL if they modified it in the dialog, otherwise the proposed SQL.
+      const finalSql = result.reason ?? (proposedSql as string);
+      applyAgentEdit(session.id, workspaceId as string, finalSql);
+
+      sseEmitter.emit(workspaceId as string, {
+        type: 'query_session_updated',
+        sessionId: ctx.sessionId,
+        workspaceId: workspaceId as string,
+        timestamp: new Date().toISOString(),
+        payload: {
+          sessionId: session.id,
+          sqlDraft: finalSql,
+          hasUnrevertedAgentEdit: true,
+          updatedBy: 'agent',
+        },
+      });
+
+      return { ok: true, sessionId: session.id, appliedSql: finalSql };
     },
   });
 }

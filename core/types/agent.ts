@@ -14,7 +14,8 @@ export type AtomicAgentName =
   | 'transformation-suggester'
   | 'test-generator'
   | 'code-generator-syntax'
-  | 'code-generator-semantic';
+  | 'code-generator-semantic'
+  | 'query-card-editor';
 
 /** @deprecated Use AtomicAgentName — kept for incremental migration */
 export type SubagentName = AtomicAgentName;
@@ -35,6 +36,7 @@ export type AgentContext = {
   sessionId: string;
   aiMode: AIMode;
   activeModule: string;
+  activeQuerySessionId?: string | null;
   tokenCounter: TokenCounter;
   tokenLimit: number;
 };

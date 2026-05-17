@@ -13,6 +13,7 @@ export function useSSEStream(workspaceId: string) {
   const removeActiveAgent = useWorkspaceStore((s) => s.removeActiveAgent);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const setBottomPanelOpen = useWorkspaceStore((s) => s.setBottomPanelOpen);
+  const setLastQuerySessionUpdate = useWorkspaceStore((s) => s.setLastQuerySessionUpdate);
 
   const retryRef = useRef(0);
   const esRef = useRef<EventSource | null>(null);
@@ -91,6 +92,9 @@ export function useSSEStream(workspaceId: string) {
       case 'model_run_update':
       case 'test_run_update':
         setBottomPanelOpen(true);
+        break;
+      case 'query_session_updated':
+        setLastQuerySessionUpdate(event.payload);
         break;
     }
   }

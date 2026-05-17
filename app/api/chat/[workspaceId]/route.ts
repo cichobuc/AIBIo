@@ -6,7 +6,9 @@ import { eq, desc } from 'drizzle-orm';
 import { withAgentContext } from '@/core/orchestration/context';
 import { sseEmitter } from '@/core/orchestration/streaming';
 import { createSession, getActiveSession, endSession } from '@/modules/ainderstanding/shell/lib/session-manager';
-import { createSupervisor, type SupervisorContext } from '@/modules/ainderstanding/shell/orchestrator';
+import { createSupervisor, type SupervisorContext, type QuerySessionSummary } from '@/modules/ainderstanding/shell/orchestrator';
+import { getOpenSessions } from '@/modules/ainderstanding/explore/lib/query-sessions';
+import { getSource } from '@/modules/ainderstanding/connect/lib/data-source-service';
 import { createSupervisorState, cleanupSupervisorState } from '@/modules/ainderstanding/shell/lib/supervisor-state';
 import { runPostProcessing } from '@/modules/ainderstanding/shell/lib/post-processing';
 import type { ActorName, AIMode } from '@/core/types/agent';
@@ -19,6 +21,7 @@ const MAX_MESSAGE_LENGTH = 4000; // BR-SHL-005
 type ChatRequestBody = {
   message: string;
   activeModule?: string;
+  activeQuerySessionId?: string | null;
 };
 
 export async function POST(
@@ -68,7 +71,7 @@ export async function POST(
     return Response.json({ error: 'INVALID_JSON', message: 'Request body must be valid JSON.' }, { status: 400 });
   }
 
-  const { message, activeModule = 'connect' } = body;
+  const { message, activeModule = 'connect', activeQuerySessionId = null } = body;
 
   if (typeof message !== 'string' || message.trim().length === 0) {
     return Response.json({ error: 'EMPTY_MESSAGE', message: 'Message must be a non-empty string.' }, { status: 400 });
@@ -96,12 +99,39 @@ export async function POST(
     activeModule,
   }).run();
 
+  // Build query sessions context for the supervisor
+  const openSessions = getOpenSessions(workspaceId);
+  let querySessionsCtx: SupervisorContext['querySessions'] | undefined;
+  if (openSessions.length > 0) {
+    const toSummary = (s: (typeof openSessions)[0]): QuerySessionSummary => {
+      let dataSourceName = s.dataSourceId;
+      try { dataSourceName = getSource(s.dataSourceId).name; } catch {}
+      return {
+        id: s.id,
+        title: s.title ?? 'Query',
+        dataSourceName,
+        sqlDraft: s.sqlDraft,
+        hasUnrevertedAgentEdit: s.hasUnrevertedAgentEdit,
+      };
+    };
+    const activeSession = openSessions.find((s) => s.id === activeQuerySessionId) ?? null;
+    const others = openSessions.filter((s) => s.id !== activeSession?.id);
+    querySessionsCtx = {
+      active: activeSession ? toSummary(activeSession) : null,
+      others: others.map((s) => {
+        const sum = toSummary(s);
+        return { id: sum.id, title: sum.title, dataSourceName: sum.dataSourceName, hasUnrevertedAgentEdit: sum.hasUnrevertedAgentEdit, sqlPreview: sum.sqlDraft.slice(0, 200) };
+      }),
+    };
+  }
+
   const agentCtx = {
     workspaceId,
     agentName: 'supervisor' as ActorName,
     sessionId: session.sessionId,
     aiMode: workspace.aiMode as AIMode,
     activeModule,
+    activeQuerySessionId: activeQuerySessionId ?? null,
     tokenCounter: { input: 0, output: 0 },
     tokenLimit: 100_000,
   };
@@ -113,6 +143,7 @@ export async function POST(
     activeModule,
     aiMode: workspace.aiMode as AIMode,
     sourcesSummary: 'No sources connected yet.',
+    querySessions: querySessionsCtx,
   };
 
   createSupervisorState(session.sessionId, workspaceId);

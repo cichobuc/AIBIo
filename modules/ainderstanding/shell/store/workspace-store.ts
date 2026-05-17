@@ -21,6 +21,13 @@ export type SettingsSection =
   | 'connections'
   | 'ui-ux';
 
+type QuerySessionUpdate = {
+  sessionId: string;
+  sqlDraft: string;
+  hasUnrevertedAgentEdit: boolean;
+  updatedBy: 'agent' | 'user';
+};
+
 interface WorkspaceState {
   workspaceId: string;
   aiMode: AIMode;
@@ -38,6 +45,7 @@ interface WorkspaceState {
   pendingApproval: PendingApproval | null;
   activeAgents: ActiveAgent[];
   messages: SSEEvent[];
+  lastQuerySessionUpdate: QuerySessionUpdate | null;
 }
 
 interface WorkspaceActions {
@@ -62,6 +70,7 @@ interface WorkspaceActions {
   removeActiveAgent: (agentName: string) => void;
   addMessage: (event: SSEEvent) => void;
   clearMessages: () => void;
+  setLastQuerySessionUpdate: (update: QuerySessionUpdate | null) => void;
 }
 
 type WorkspaceStore = WorkspaceState & WorkspaceActions;
@@ -85,6 +94,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       pendingApproval: null,
       activeAgents: [],
       messages: [],
+      lastQuerySessionUpdate: null,
 
       init: (workspaceId) => set({ workspaceId, messages: [], activeAgents: [], isSessionActive: false }),
       setAiMode: (aiMode) => set({ aiMode }),
@@ -115,6 +125,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((s) => ({ activeAgents: s.activeAgents.filter((a) => a.agentName !== agentName) })),
       addMessage: (event) => set((s) => ({ messages: [...s.messages.slice(-200), event] })),
       clearMessages: () => set({ messages: [] }),
+      setLastQuerySessionUpdate: (update) => set({ lastQuerySessionUpdate: update }),
     }),
     {
       name: 'aibio-workspace',

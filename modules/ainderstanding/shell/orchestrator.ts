@@ -12,12 +12,21 @@ import { supervisorHooks } from '@/core/orchestration/hooks';
 import type { AgentContext, AIMode } from '@/core/types/agent';
 import type { ApprovalGateDetails } from '@/core/types/permissions';
 import { getApprovalGateForTool } from './lib/approval-gate-map';
+import { queryCardEditorDefinition } from '@/modules/ainderstanding/explore/agents/query-card-editor';
 
 export { type SDKMessage };
 
 // ---------------------------------------------------------------------------
 // Context shape
 // ---------------------------------------------------------------------------
+
+export type QuerySessionSummary = {
+  id: string;
+  title: string;
+  dataSourceName: string;
+  sqlDraft: string;
+  hasUnrevertedAgentEdit: boolean;
+};
 
 export type SupervisorContext = {
   workspaceName: string;
@@ -26,11 +35,35 @@ export type SupervisorContext = {
   activeModule: string;
   aiMode: AIMode;
   sourcesSummary: string;
+  querySessions?: {
+    active: QuerySessionSummary | null;
+    others: Array<Omit<QuerySessionSummary, 'sqlDraft'> & { sqlPreview: string }>;
+  };
 };
 
 // ---------------------------------------------------------------------------
 // Supervisor system prompt
 // ---------------------------------------------------------------------------
+
+function buildQuerySessionsSection(qs: SupervisorContext['querySessions']): string {
+  if (!qs) return '';
+  const lines: string[] = ['', '## Open query cards in Explore'];
+  if (qs.active) {
+    const agentTag = qs.active.hasUnrevertedAgentEdit ? ' [AI edited — user can revert]' : '';
+    lines.push(`Active card: "${qs.active.title}"${agentTag} · ${qs.active.dataSourceName} (ID: ${qs.active.id})`);
+    lines.push('```sql');
+    lines.push(qs.active.sqlDraft || '-- empty');
+    lines.push('```');
+  } else {
+    lines.push('No active card.');
+  }
+  if (qs.others.length > 0) {
+    const otherList = qs.others.map((o) => `"${o.title}" · ${o.dataSourceName} (ID: ${o.id})`).join(', ');
+    lines.push(`Other open cards: ${otherList}`);
+    lines.push('Use mcp__aibio__read_query_session to inspect any of them.');
+  }
+  return lines.join('\n');
+}
 
 function buildSupervisorPrompt(ctx: SupervisorContext): string {
   return `You are the supervisor agent for AIBIo AInderstanding workspace "${ctx.workspaceName}".
@@ -46,7 +79,7 @@ documentation records, or test files directly — those are handled by specializ
 - Active module: ${ctx.activeModule}
 - AI mode: ${ctx.aiMode}
 - Session ID: ${ctx.sessionId}
-
+${buildQuerySessionsSection(ctx.querySessions)}
 ## Dispatch rules
 1. If AI mode is 'manual' → respond: "Manual mode active. Use the Monaco editor directly."
 2. Use Task to invoke the appropriate Phase Coordinator:
@@ -57,11 +90,13 @@ documentation records, or test files directly — those are handled by specializ
 3. Coordinator bypass (direct agent dispatch) is allowed ONLY for:
    - Single source schema refresh only → Task('schema-explorer', ...)
    - Standalone transformation hints for a named model → Task('transformation-suggester', ...)
+   - Query card read or edit → Task('query-card-editor', ...)
 
 ## Constraints
 - Never call write_model_file, write_test_file, write_doc_record, update_doc_record directly.
 - Never expose raw query result rows without mcp__aibio__guarded_share_results approval.
 - Always communicate clearly what you are doing and why.
+- For query card edits: always delegate to query-card-editor; each edit requires user approval.
 
 ## Response style
 Be concise. Summarize what agents did. Highlight what requires user review.`;
@@ -440,6 +475,7 @@ export async function* createSupervisor(
     'sql-writer': sqlWriterDefinition,
     'transformation-suggester': transformationSuggesterDefinition,
     'test-generator': testGeneratorDefinition,
+    'query-card-editor': queryCardEditorDefinition,
     // Phase 2
     'code-generator-syntax': codeGeneratorSyntaxDefinition,
     'code-generator-semantic': codeGeneratorSemanticDefinition,
@@ -459,6 +495,8 @@ export async function* createSupervisor(
         'mcp__aibio__assess_readiness',
         'mcp__aibio__read_coverage_summary',
         'mcp__aibio__guarded_share_results',
+        'mcp__aibio__list_query_sessions',
+        'mcp__aibio__read_query_session',
       ],
       canUseTool,
       hooks: supervisorHooks,

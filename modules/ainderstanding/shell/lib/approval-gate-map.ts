@@ -9,6 +9,7 @@ const GATED_TOOLS: Record<string, ApprovalGateType> = {
   'mcp__aibio__write_test_file': 'write_test_file',
   'mcp__aibio__write_doc_record': 'write_to_docs',
   'mcp__aibio__update_doc_record': 'write_to_docs',
+  'mcp__aibio__edit_query_session': 'edit_query_session',
 };
 
 export function getApprovalGateForTool(toolName: string): ApprovalGateType | null {

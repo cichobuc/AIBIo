@@ -108,6 +108,18 @@ type SchemaUpdateEvent = BaseSSEEvent & {
   };
 };
 
+// --- Explore query session updates ---
+
+type QuerySessionUpdatedEvent = BaseSSEEvent & {
+  type: 'query_session_updated';
+  payload: {
+    sessionId: string;
+    sqlDraft: string;
+    hasUnrevertedAgentEdit: boolean;
+    updatedBy: 'agent' | 'user';
+  };
+};
+
 // --- Translate (Phase 2) ---
 
 type SnippetGeneratedEvent = BaseSSEEvent & {
@@ -180,6 +192,7 @@ export type SSEEvent =
   | ModelRunUpdateEvent
   | TestRunUpdateEvent
   | SchemaUpdateEvent
+  | QuerySessionUpdatedEvent
   | SnippetGeneratedEvent
   | SnippetTestResultEvent
   | BudgetWarningEvent

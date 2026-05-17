@@ -40,6 +40,8 @@ function describeGate(gateType: ApprovalGateType, details: ApprovalGateDetails):
       return `Write test for: ${(details as { modelName: string }).modelName}`;
     case 'write_to_docs':
       return `Document ${(details as { recordType: string }).recordType}: ${(details as { name: string }).name}`;
+    case 'edit_query_session':
+      return `Edit query card: ${(details as { sessionTitle: string }).sessionTitle}`;
   }
 }
 

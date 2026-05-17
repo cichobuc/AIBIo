@@ -4,11 +4,14 @@ import { useRef, useState, useCallback } from 'react';
 import { SendHorizontal } from 'lucide-react';
 import { Textarea, Button, cn } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
+import { useExploreStore } from '@/modules/ainderstanding/explore/store/explore-store';
 
 export function ChatInput({ workspaceId }: { workspaceId: string }) {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const activeQuerySessionId = useExploreStore((s) => s.activeQuerySessionId);
 
   const aiMode = useWorkspaceStore((s) => s.aiMode);
   const pendingApproval = useWorkspaceStore((s) => s.pendingApproval);
@@ -54,7 +57,7 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
       const res = await fetch(`/api/chat/${workspaceId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ message: trimmed, activeQuerySessionId }),
       });
       if (res.ok) {
         const data = await res.json() as { sessionId: string };

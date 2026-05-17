@@ -1,12 +1,13 @@
 'use client';
 
-import { X, Code2 } from 'lucide-react';
+import { X, Code2, Undo2 } from 'lucide-react';
 import { cn } from '@/core/ui';
 
 type Tab = {
   id: string;
   title: string | null;
   index: number;
+  hasUnrevertedAgentEdit?: boolean;
 };
 
 type Props = {
@@ -14,9 +15,10 @@ type Props = {
   activeId: string | null;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
+  onRevert?: (id: string) => void;
 };
 
-export function QueryTabBar({ tabs, activeId, onSelect, onClose }: Props) {
+export function QueryTabBar({ tabs, activeId, onSelect, onClose, onRevert }: Props) {
   if (tabs.length === 0) return null;
 
   return (
@@ -26,7 +28,7 @@ export function QueryTabBar({ tabs, activeId, onSelect, onClose }: Props) {
           key={tab.id}
           onClick={() => onSelect(tab.id)}
           className={cn(
-            'flex h-full min-w-0 max-w-[180px] shrink-0 items-center gap-1.5 border-r border-border px-3 text-xs transition-colors group',
+            'flex h-full min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 border-r border-border px-3 text-xs transition-colors group',
             tab.id === activeId
               ? 'bg-background text-foreground border-b-2 border-b-primary -mb-px'
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
@@ -36,6 +38,17 @@ export function QueryTabBar({ tabs, activeId, onSelect, onClose }: Props) {
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">
             {tab.title ?? `Query ${tab.index + 1}`}
           </span>
+          {tab.hasUnrevertedAgentEdit && onRevert && (
+            <span
+              role="button"
+              title="AI agent edited this query. Click to revert to your original."
+              onClick={(e) => { e.stopPropagation(); onRevert(tab.id); }}
+              className="ml-0.5 rounded-sm px-1 py-0.5 shrink-0 flex items-center gap-0.5 text-[10px] font-medium text-accent-ai hover:bg-accent-ai/10 transition-colors"
+            >
+              <Undo2 className="h-2.5 w-2.5" />
+              AI
+            </span>
+          )}
           <span
             role="button"
             onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}

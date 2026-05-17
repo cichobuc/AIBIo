@@ -61,6 +61,9 @@ type QuerySession = {
   dataSourceId: string;
   title: string | null;
   sqlDraft: string;
+  sqlBaseline: string | null;
+  hasUnrevertedAgentEdit: boolean;
+  lastAgentEditAt: string | null;
   isClosed: boolean;
   createdAt: string;
   updatedAt: string;
