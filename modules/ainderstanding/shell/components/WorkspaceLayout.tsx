@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/core/ui';
+import { cn } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { useSSEStream } from '../hooks/useSSEStream';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -14,6 +16,7 @@ import { BottomPanel } from './BottomPanel';
 import { StatusBar } from './StatusBar';
 import { CommandPalette } from './CommandPalette';
 import { SettingsDialog } from './settings/SettingsDialog';
+import { ModuleTabBar } from './ModuleTabBar';
 
 export function WorkspaceLayout({
   workspaceId,
@@ -28,6 +31,43 @@ export function WorkspaceLayout({
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen);
   const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen);
   const bottomPanelOpen = useWorkspaceStore((s) => s.bottomPanelOpen);
+
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const activeModule = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean);
+    const wsIdx = segments.findIndex((s) => s === workspaceId);
+    return segments[wsIdx + 1] ?? '';
+  }, [pathname, workspaceId]);
+
+  // Cache rendered panels by module — never unmounted while open
+  const panelCacheRef = useRef<Map<string, React.ReactNode>>(new Map());
+  panelCacheRef.current.set(activeModule, children);
+
+  const [openModules, setOpenModules] = useState<string[]>(() =>
+    activeModule ? [activeModule] : [],
+  );
+
+  // Add new module to open list before paint to avoid flash
+  useLayoutEffect(() => {
+    if (!activeModule) return;
+    setOpenModules((prev) => (prev.includes(activeModule) ? prev : [...prev, activeModule]));
+  }, [activeModule]);
+
+  const closeModule = useCallback(
+    (mod: string) => {
+      panelCacheRef.current.delete(mod);
+      setOpenModules((prev) => {
+        const remaining = prev.filter((m) => m !== mod);
+        if (mod === activeModule && remaining.length > 0) {
+          router.push(`/workspace/${workspaceId}/${remaining[remaining.length - 1]}`);
+        }
+        return remaining;
+      });
+    },
+    [activeModule, workspaceId, router],
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -77,7 +117,27 @@ export function WorkspaceLayout({
                   )}
 
                   <ResizablePanel id="content" minSize={300}>
-                    <div className="h-full overflow-auto">{children}</div>
+                    <div className="flex h-full flex-col">
+                      <ModuleTabBar
+                        openModules={openModules}
+                        activeModule={activeModule}
+                        workspaceId={workspaceId}
+                        onClose={closeModule}
+                      />
+                      <div className="relative min-h-0 flex-1">
+                        {openModules.map((mod) => (
+                          <div
+                            key={mod}
+                            className={cn(
+                              'absolute inset-0 overflow-auto',
+                              mod !== activeModule && 'hidden',
+                            )}
+                          >
+                            {panelCacheRef.current.get(mod)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </ResizablePanel>
 
                   {chatPanelOpen && (

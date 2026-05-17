@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useExploreStore } from '@/modules/ainderstanding/explore/store/explore-store';
 import { Loader2 } from 'lucide-react';
 import { ColumnProfileDetailTab } from '@/modules/ainderstanding/explore/components/ColumnProfileDetailTab';
 import { SchemaDiffViewer } from '@/modules/ainderstanding/explore/components/SchemaDiffViewer';
@@ -131,7 +132,19 @@ export function ExplorePageClient({
   const [profilingTable, setProfilingTable] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const querySessionId = sp.get('query');
+  const storedSessionId = useExploreStore((s) => s.activeQuerySessionId);
+  const querySessionId = sp.get('query') ?? storedSessionId;
+
+  // Restore URL when navigating back to explore without ?query param
+  useEffect(() => {
+    if (!sp.get('query') && storedSessionId) {
+      const params = new URLSearchParams(sp.toString());
+      params.set('query', storedSessionId);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+    // Only on mount — intentional empty dep array
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedTable: SelectedTable | undefined =
     !querySessionId && sp.get('source') && sp.get('table')

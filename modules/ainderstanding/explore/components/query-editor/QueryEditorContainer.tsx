@@ -6,6 +6,7 @@ import { Database } from 'lucide-react';
 import { QueryTabBar } from './QueryTabBar';
 import { SqlEditor } from './SqlEditor';
 import { QueryResultPanel } from './QueryResultPanel';
+import { useExploreStore } from '../../store/explore-store';
 import type { ExploreSource } from '../../lib/explore-data';
 
 type Session = {
@@ -32,6 +33,7 @@ const DRAFT_DEBOUNCE_MS = 1500;
 export function QueryEditorContainer({ workspaceId, initialSessions, sources, activeSessionId }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
+  const setActiveQuerySessionId = useExploreStore((s) => s.setActiveQuerySessionId);
 
   const [sessions, setSessions] = useState<Session[]>(initialSessions);
   const [drafts, setDrafts] = useState<Record<string, string>>(
@@ -66,6 +68,12 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
 
   const tabs = sessions.map((s, i) => ({ id: s.id, title: s.title, index: i }));
 
+  // Persist active session into store so ExplorePageClient can restore it on re-mount
+  const activeSessionId_ = activeSession?.id ?? null;
+  useEffect(() => {
+    if (activeSessionId_) setActiveQuerySessionId(activeSessionId_);
+  }, [activeSessionId_, setActiveQuerySessionId]);
+
   const switchTab = useCallback(
     (id: string) => {
       const params = new URLSearchParams(sp.toString());
@@ -86,12 +94,14 @@ export function QueryEditorContainer({ workspaceId, initialSessions, sources, ac
       const last = remaining[remaining.length - 1];
       if (last) {
         params.set('query', last.id);
+        setActiveQuerySessionId(last.id);
       } else {
         params.delete('query');
+        setActiveQuerySessionId(null);
       }
       router.push(`?${params.toString()}`, { scroll: false });
     },
-    [workspaceId, router, sp],
+    [workspaceId, router, sp, setActiveQuerySessionId],
   );
 
   const handleDraftChange = useCallback(
