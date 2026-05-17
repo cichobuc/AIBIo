@@ -115,13 +115,14 @@ export const approvalGateCanUseTool: CanUseToolCallback = async (toolName, input
 
 Gated tools (volajú `awaitApproval`):
 
-| Tool (mcp__aibio__ prefix) | Gate |
-|---|---|
-| `guarded_run_select_query` | `execute_query` |
-| `guarded_share_results` | `share_results_with_ai` |
-| `write_model_file` | `write_model_file` |
-| `write_test_file` | `write_test_file` |
-| `write_doc_record` / `update_doc_record` | `write_to_docs` (len ak `confidence < high`) |
+| Tool (mcp__aibio__ prefix) | Gate | Dispatched by |
+|---|---|---|
+| `guarded_run_select_query` | `execute_query` | sql-writer |
+| `guarded_share_results` | `share_results_with_ai` | supervisor (direct) |
+| `write_model_file` | `write_model_file` | sql-writer |
+| `write_test_file` | `write_test_file` | test-generator |
+| `write_doc_record` / `update_doc_record` | `write_to_docs` (len ak `confidence < high`) | docs-keeper |
+| `edit_query_session` | `edit_query_session` | query-card-editor (direct dispatch from supervisor) |
 
 ### PostToolUse hooks — deterministický post-processing
 

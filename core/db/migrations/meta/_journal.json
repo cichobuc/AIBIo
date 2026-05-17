@@ -57,6 +57,13 @@
       "when": 1747468800000,
       "tag": "0007_query_session_agent_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1747555200000,
+      "tag": "0008_chat_threads",
+      "breakpoints": true
     }
   ]
 }

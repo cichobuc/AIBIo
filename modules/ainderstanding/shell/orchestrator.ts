@@ -29,6 +29,8 @@ export type QuerySessionSummary = {
   hasUnrevertedAgentEdit: boolean;
 };
 
+export type RecentMessage = { role: 'user' | 'assistant'; content: string };
+
 export type SupervisorContext = {
   workspaceName: string;
   workspaceId: string;
@@ -40,6 +42,7 @@ export type SupervisorContext = {
     active: QuerySessionSummary | null;
     others: Array<Omit<QuerySessionSummary, 'sqlDraft'> & { sqlPreview: string }>;
   };
+  recentMessages?: RecentMessage[];
 };
 
 // ---------------------------------------------------------------------------
@@ -66,6 +69,19 @@ function buildQuerySessionsSection(qs: SupervisorContext['querySessions']): stri
   return lines.join('\n');
 }
 
+function buildConversationHistory(messages: RecentMessage[]): string {
+  if (messages.length === 0) return '';
+  const lines: string[] = ['', '<conversation_history>'];
+  for (const m of messages) {
+    const label = m.role === 'assistant'
+      ? '[prior assistant reply, already completed — do not re-dispatch]'
+      : 'user';
+    lines.push(`${label}: ${m.content}`);
+  }
+  lines.push('</conversation_history>');
+  return lines.join('\n');
+}
+
 function buildSupervisorPrompt(ctx: SupervisorContext): string {
   return `You are the supervisor agent for AIBIo AInderstanding workspace "${ctx.workspaceName}".
 
@@ -80,7 +96,7 @@ documentation records, or test files directly — those are handled by specializ
 - Active module: ${ctx.activeModule}
 - AI mode: ${ctx.aiMode}
 - Session ID: ${ctx.sessionId}
-${buildQuerySessionsSection(ctx.querySessions)}
+${buildQuerySessionsSection(ctx.querySessions)}${buildConversationHistory(ctx.recentMessages ?? [])}
 ## Dispatch rules
 1. If AI mode is 'manual' → respond: "Manual mode active. Use the Monaco editor directly."
 2. Use Task to invoke the appropriate Phase Coordinator:

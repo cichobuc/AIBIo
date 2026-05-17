@@ -10,6 +10,7 @@ export const chatMessages = sqliteTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     sessionId: text('session_id').notNull(),
+    threadId: text('thread_id'),
     role: text('role', { enum: ['user', 'assistant'] }).notNull(),
     content: text('content').notNull(),
     agentName: text('agent_name'),
@@ -18,5 +19,8 @@ export const chatMessages = sqliteTable(
       .notNull()
       .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
   },
-  (t) => [index('chat_messages_workspace_session_idx').on(t.workspaceId, t.sessionId, t.createdAt)],
+  (t) => [
+    index('chat_messages_workspace_session_idx').on(t.workspaceId, t.sessionId, t.createdAt),
+    index('chat_messages_thread_idx').on(t.workspaceId, t.threadId, t.createdAt),
+  ],
 );

@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { db } from '@/core/db/client';
 import { workspaces, chatMessages } from '@/core/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { withAgentContext } from '@/core/orchestration/context';
 import { sseEmitter } from '@/core/orchestration/streaming';
 import { createSession, getActiveSession, endSession } from '@/modules/ainderstanding/shell/lib/session-manager';
-import { createSupervisor, type SupervisorContext, type QuerySessionSummary } from '@/modules/ainderstanding/shell/orchestrator';
+import { createSupervisor, type SupervisorContext, type QuerySessionSummary, type RecentMessage } from '@/modules/ainderstanding/shell/orchestrator';
 import { getOpenSessions } from '@/modules/ainderstanding/explore/lib/query-sessions';
 import { getSource, listSources } from '@/modules/ainderstanding/connect/lib/data-source-service';
 import { readSchemaSnapshot } from '@/modules/ainderstanding/explore/lib/mcp-tools';
@@ -45,6 +45,7 @@ type ChatRequestBody = {
   message: string;
   activeModule?: string;
   activeQuerySessionId?: string | null;
+  threadId?: string | null;
 };
 
 export async function POST(
@@ -94,7 +95,7 @@ export async function POST(
     return Response.json({ error: 'INVALID_JSON', message: 'Request body must be valid JSON.' }, { status: 400 });
   }
 
-  const { message, activeModule = 'connect', activeQuerySessionId = null } = body;
+  const { message, activeModule = 'connect', activeQuerySessionId = null, threadId = null } = body;
 
   if (typeof message !== 'string' || message.trim().length === 0) {
     return Response.json({ error: 'EMPTY_MESSAGE', message: 'Message must be a non-empty string.' }, { status: 400 });
@@ -108,14 +109,28 @@ export async function POST(
     );
   }
 
+  // Fetch conversation history before inserting current message
+  const effectiveThreadId = threadId ?? null;
+  const recentMessages: RecentMessage[] = effectiveThreadId
+    ? db
+        .select({ role: chatMessages.role, content: chatMessages.content })
+        .from(chatMessages)
+        .where(and(eq(chatMessages.workspaceId, workspaceId), eq(chatMessages.threadId, effectiveThreadId)))
+        .orderBy(desc(chatMessages.createdAt))
+        .limit(20)
+        .all()
+        .reverse()
+        .map((r) => ({ role: r.role as 'user' | 'assistant', content: r.content }))
+    : [];
+
   const session = createSession(workspaceId);
   const messageId = randomUUID();
 
-  // Persist user message (stub — Document module owns chat_messages fully in D1)
   db.insert(chatMessages).values({
     id: messageId,
     workspaceId,
     sessionId: session.sessionId,
+    threadId: effectiveThreadId,
     role: 'user',
     content: message,
     agentName: null,
@@ -167,16 +182,37 @@ export async function POST(
     aiMode: workspace.aiMode as AIMode,
     sourcesSummary: buildSourcesSummary(workspaceId),
     querySessions: querySessionsCtx,
+    recentMessages: recentMessages.slice(-20),
   };
 
   createSupervisorState(session.sessionId, workspaceId);
 
   // Fire-and-forget supervisor run — response returns immediately, stream via SSE
   void withAgentContext(agentCtx, async () => {
+    let supervisorText = '';
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      for await (const _msg of createSupervisor(supervisorCtx, agentCtx, message)) {
-        // SSE emission happens inside createSupervisor's generator
+      for await (const msg of createSupervisor(supervisorCtx, agentCtx, message)) {
+        const raw = msg as { type?: string; message?: { content?: unknown[] } };
+        if (raw.type === 'assistant' && Array.isArray(raw.message?.content)) {
+          for (const block of raw.message.content) {
+            const b = block as { type?: string; text?: string };
+            if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
+              supervisorText += b.text;
+            }
+          }
+        }
+      }
+      if (supervisorText.trim() && effectiveThreadId) {
+        db.insert(chatMessages).values({
+          id: randomUUID(),
+          workspaceId,
+          sessionId: session.sessionId,
+          threadId: effectiveThreadId,
+          role: 'assistant',
+          content: supervisorText.trim(),
+          agentName: 'supervisor',
+          activeModule,
+        }).run();
       }
       await runPostProcessing(agentCtx);
       sseEmitter.emit(workspaceId, {
@@ -187,13 +223,25 @@ export async function POST(
         payload: { summary: 'Done.', agentsUsed: ['supervisor'], totalDurationMs: 0 },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      if (supervisorText.trim() && effectiveThreadId) {
+        db.insert(chatMessages).values({
+          id: randomUUID(),
+          workspaceId,
+          sessionId: session.sessionId,
+          threadId: effectiveThreadId,
+          role: 'assistant',
+          content: supervisorText.trim(),
+          agentName: 'supervisor',
+          activeModule,
+        }).run();
+      }
+      const errMessage = err instanceof Error ? err.message : String(err);
       sseEmitter.emit(workspaceId, {
         type: 'stream_error',
         sessionId: session.sessionId,
         workspaceId,
         timestamp: new Date().toISOString(),
-        payload: { errorCode: 'SUPERVISOR_ERROR', message, recoverable: false },
+        payload: { errorCode: 'SUPERVISOR_ERROR', message: errMessage, recoverable: false },
       });
     } finally {
       endSession(session.sessionId);

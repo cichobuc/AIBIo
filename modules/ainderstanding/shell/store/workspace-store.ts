@@ -33,6 +33,7 @@ interface WorkspaceState {
   aiMode: AIMode;
   isSessionActive: boolean;
   sessionId: string | null;
+  threadId: string;
 
   sidebarOpen: boolean;
   chatPanelOpen: boolean;
@@ -82,6 +83,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       aiMode: 'auto',
       isSessionActive: false,
       sessionId: null,
+      threadId: crypto.randomUUID(),
 
       sidebarOpen: true,
       chatPanelOpen: true,
@@ -124,13 +126,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       removeActiveAgent: (agentName) =>
         set((s) => ({ activeAgents: s.activeAgents.filter((a) => a.agentName !== agentName) })),
       addMessage: (event) => set((s) => ({ messages: [...s.messages.slice(-200), event] })),
-      clearMessages: () => set({ messages: [] }),
+      clearMessages: () => set({ messages: [], threadId: crypto.randomUUID() }),
       setLastQuerySessionUpdate: (update) => set({ lastQuerySessionUpdate: update }),
     }),
     {
       name: 'aibio-workspace',
       partialize: (state) => ({
         aiMode: state.aiMode,
+        threadId: state.threadId,
         sidebarOpen: state.sidebarOpen,
         chatPanelOpen: state.chatPanelOpen,
         bottomPanelOpen: state.bottomPanelOpen,

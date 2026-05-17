@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { PanelRightClose } from 'lucide-react';
-import { Button, cn } from '@/core/ui';
+import { PanelRightClose, MessageSquarePlus } from 'lucide-react';
+import { Button, cn, Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { ActiveAgentsBadge } from './ActiveAgentsBadge';
 import { MessageList } from './MessageList';
@@ -20,6 +20,8 @@ async function resolveApproval(requestId: string, decision: 'approved' | 'denied
 export function GlobalChatPanel({ workspaceId }: { workspaceId: string }) {
   const [contextItems, setContextItems] = useState<{ id: string; label: string; icon: string }[]>([]);
   const toggleChat = useWorkspaceStore((s) => s.toggleChatPanel);
+  const clearMessages = useWorkspaceStore((s) => s.clearMessages);
+  const isSessionActive = useWorkspaceStore((s) => s.isSessionActive);
 
   function removeContextItem(id: string) {
     setContextItems((prev) => prev.filter((item) => item.id !== id));
@@ -33,15 +35,36 @@ export function GlobalChatPanel({ workspaceId }: { workspaceId: string }) {
           <span className="text-accent-ai">✨</span>
           <span className="text-body font-medium text-foreground">AI Assistant</span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={toggleChat}
-          aria-label="Collapse AI panel (⌘\)"
-        >
-          <PanelRightClose className="h-4 w-4" />
-        </Button>
+        <TooltipProvider>
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                  onClick={clearMessages}
+                  disabled={isSessionActive}
+                  aria-label="New conversation"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {isSessionActive ? 'Wait for AI to finish' : 'New conversation — AI forgets context'}
+              </TooltipContent>
+            </Tooltip>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              onClick={toggleChat}
+              aria-label="Collapse AI panel (⌘\)"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Active agents */}

@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { ExecuteQueryGate } from './approval/ExecuteQueryGate';
 import { ShareResultsGate } from './approval/ShareResultsGate';
@@ -8,25 +7,7 @@ import { WriteFileGate } from './approval/WriteFileGate';
 import { WriteDocsGate } from './approval/WriteDocsGate';
 import { SqlDiffApprovalDialog } from '../../model/components/SqlDiffApprovalDialog';
 import { SqlDiffDialog } from '@/core/ui/sql-diff-dialog';
-
-function useCountdown(timeoutAt: string | undefined): { display: string; remaining: number } {
-  const [remaining, setRemaining] = useState(300);
-
-  useEffect(() => {
-    if (!timeoutAt) return;
-    const update = () => {
-      const secs = Math.max(0, Math.round((new Date(timeoutAt).getTime() - Date.now()) / 1000));
-      setRemaining(secs);
-    };
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [timeoutAt]);
-
-  const mins = Math.floor(remaining / 60);
-  const secs = remaining % 60;
-  return { display: `${mins}:${secs.toString().padStart(2, '0')}`, remaining };
-}
+import { useCountdown } from '../hooks/useCountdown';
 
 async function resolveApproval(requestId: string, decision: 'approved' | 'denied', reason?: string) {
   await fetch(`/api/approvals/${requestId}`, {
@@ -39,6 +20,7 @@ async function resolveApproval(requestId: string, decision: 'approved' | 'denied
 export function ApprovalDialog() {
   const pendingApproval = useWorkspaceStore((s) => s.pendingApproval);
   const setPendingApproval = useWorkspaceStore((s) => s.setPendingApproval);
+  const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen);
   const { display: countdown, remaining } = useCountdown(pendingApproval?.timeoutAt);
 
   if (!pendingApproval) return null;
@@ -137,6 +119,8 @@ export function ApprovalDialog() {
   }
 
   if (gateType === 'edit_query_session') {
+    // Inline card in chat handles this when chat panel is open — show floating fallback otherwise
+    if (chatPanelOpen) return null;
     const d = details as { sessionId: string; sessionTitle: string; dataSourceName: string; previousSql: string; newSql: string };
     return (
       <SqlDiffDialog

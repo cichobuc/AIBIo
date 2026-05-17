@@ -841,6 +841,7 @@ erDiagram
         TEXT id PK
         TEXT workspace_id FK
         TEXT session_id
+        TEXT thread_id
         TEXT role
         TEXT content
         TEXT agent_name
@@ -881,8 +882,10 @@ erDiagram
 
 ### Poznámky
 
+- `chat_messages.thread_id` — UUID konverzačného threadu (odlišné od `session_id`, čo je korelačné ID jedného supervisor rubu). Jeden thread = jedna súvislá konverzácia; "New conversation" generuje nový UUID. History query filtruje podľa `thread_id`. Nullable pre staré správy (backfill: `thread_id = session_id`).
+- `chat_messages.session_id` — korelačné ID jedného supervisor run-u (in-memory session, nie persisted session). Umožňuje koreláciu s audit logom.
 - `chat_messages.active_module` — URL sub-modul aktívny v čase odoslania správy. Supervisor ho berie do úvahy pri intent classification; persist-ovanie umožňuje rekonštruovať session kontext a zobraziť modul-badge pri správach v histórii. Nullable: `NULL` pre staré správy pred migráciou.
-- `chat_messages.agent_name` — nullable pre `role=user` správy.
+- `chat_messages.agent_name` — nullable pre `role=user` správy; `'supervisor'` pre persisted assistant správy.
 
 ### PII zrkadlenie
 

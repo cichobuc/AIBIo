@@ -6,6 +6,7 @@ import { AgentBadge } from '@/core/ui';
 import { useWorkspaceStore } from '../store/workspace-store';
 import { ToolCallChip } from './ToolCallChip';
 import { ApprovalRequiredCard } from './ApprovalRequiredCard';
+import { InlineSqlApprovalCard } from './InlineSqlApprovalCard';
 import { ThinkingLog } from './ThinkingLog';
 import type { SSEEvent } from '@/core/orchestration/streaming';
 
@@ -80,6 +81,21 @@ export function MessageList({ workspaceId, onApproval }: {
               return null;
 
             case 'approval_required':
+              if (event.payload.gateType === 'edit_query_session') {
+                const d = event.payload.details as {
+                  sessionId: string; sessionTitle: string; dataSourceName: string;
+                  previousSql: string; newSql: string;
+                };
+                return (
+                  <InlineSqlApprovalCard
+                    key={event.payload.requestId}
+                    requestId={event.payload.requestId}
+                    agentName={event.payload.agentName}
+                    timeoutAt={event.payload.timeoutAt}
+                    details={d}
+                  />
+                );
+              }
               return (
                 <ApprovalRequiredCard
                   key={event.payload.requestId}

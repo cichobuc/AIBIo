@@ -17,6 +17,7 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
   const pendingApproval = useWorkspaceStore((s) => s.pendingApproval);
   const setSession = useWorkspaceStore((s) => s.setSession);
   const sessionId = useWorkspaceStore((s) => s.sessionId);
+  const threadId = useWorkspaceStore((s) => s.threadId);
   const addMessage = useWorkspaceStore((s) => s.addMessage);
 
   const isDisabled = aiMode === 'manual' || pendingApproval !== null || sending;
@@ -57,7 +58,7 @@ export function ChatInput({ workspaceId }: { workspaceId: string }) {
       const res = await fetch(`/api/chat/${workspaceId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed, activeQuerySessionId }),
+        body: JSON.stringify({ message: trimmed, activeQuerySessionId, threadId }),
       });
       if (res.ok) {
         const data = await res.json() as { sessionId: string };

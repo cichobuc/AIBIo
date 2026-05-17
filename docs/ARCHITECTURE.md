@@ -766,8 +766,9 @@ Tool handler (server)              UI (browser)
 | `share_results_with_ai` | **Level 3 — Full Modal** | High-friction; Layer 3 data exposure; user must actively decide to share query results |
 | `write_model_file` | **Level 3 — Full Modal** | High-friction; permanent filesystem write; user must read proposed SQL before approving |
 | `write_test_file` | **Level 3 — Full Modal** | High-friction; test definition write |
+| `edit_query_session` | **Level 1 — Inline Chat Card** | Low-friction; temporary SQL draft edit (revertable); rendered inline in `MessageList` as `InlineSqlApprovalCard` with red/green diff and Approve/Deny. Falls back to floating panel if chat is closed. Payload: `{ sessionId, sessionTitle, dataSourceName, previousSql, newSql }`. |
 
-**Level 1 — Inline Card** is used for `guarded_sample_data` first-time reference-table access (permission-tier soft-confirm, not a formal gate). See `docs/UI_UX.md §17` for component specs and ASCII wireframes.
+**Level 1 — Inline Card** is used for `guarded_sample_data` first-time reference-table access and `edit_query_session` (see above). See `docs/UI_UX.md §17` for component specs and ASCII wireframes.
 
 ---
 
